@@ -1,5 +1,4 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../@/components/ui/card';
-import { Badge } from '../../@/components/ui/badge';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import type { MonthlyFinancialSummary } from '@/types';
 import { Info } from 'lucide-react';

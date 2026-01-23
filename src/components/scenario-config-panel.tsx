@@ -3,7 +3,6 @@ import { Label } from '../../@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../@/components/ui/select';
 import { Input } from '../../@/components/ui/input';
 import { Slider } from '../../@/components/ui/slider';
-import { Badge } from '../../@/components/ui/badge';
 import { Sun, Battery, Zap, Settings2 } from 'lucide-react';
 import { UK_BATTERY_PRESETS } from '@/lib/battery-engine';
 import { UK_PV_PRESETS } from '@/lib/solar-generator';

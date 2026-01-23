@@ -70,14 +70,6 @@ export class Simulator {
             };
         });
 
-        // Energy balance check (for debugging)
-        const totalGen = intervalResults.reduce((sum, r) => sum + r.generation, 0);
-        const totalCon = intervalResults.reduce((sum, r) => sum + r.consumption, 0);
-        const totalImp = intervalResults.reduce((sum, r) => sum + r.gridImportKwh, 0);
-        const totalExp = intervalResults.reduce((sum, r) => sum + r.gridExportKwh, 0);
-        const totalCharge = intervalResults.reduce((sum, r) => sum + r.chargeKwh, 0);
-        const totalDischarge = intervalResults.reduce((sum, r) => sum + r.dischargeKwh, 0);
-
         // Aggregate into monthly summaries
         const monthlyBreakdown = this.aggregateMonthly(intervalResults);
 

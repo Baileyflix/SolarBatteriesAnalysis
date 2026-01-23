@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '../../@/components/ui/card';
 import type { ScenarioComparison, ROICalculation } from '@/types';
 import type { OctopusSolarEstimateSummary } from '@/services/octopus-energy';
-import { TrendingUp, TrendingDown, Zap, Battery, ArrowDownToLine, ArrowUpFromLine, PiggyBank, Sun, Info } from 'lucide-react';
+import { TrendingUp, Zap, Battery, ArrowDownToLine, ArrowUpFromLine, PiggyBank, Sun, Info } from 'lucide-react';
 
 interface SummaryMetricsProps {
     comparison: ScenarioComparison;

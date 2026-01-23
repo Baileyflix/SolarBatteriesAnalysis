@@ -28,8 +28,7 @@ export function useOctopusSolarEstimate(): UseOctopusSolarEstimateReturn {
 
             setEstimate(result);
             return result;
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'Failed to fetch Octopus solar estimate';
+        } catch {
             // Don't set error state - this is optional data
             setEstimate(null);
             return null;
