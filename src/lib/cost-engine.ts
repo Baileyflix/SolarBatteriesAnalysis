@@ -140,7 +140,8 @@ export const UK_TARIFF_PRESETS = {
     // Day 05:00-16:00 & 19:00-02:00: ~24p import  
     // Peak 16:00-19:00: ~30p import, 25p EXPORT
     octopusFlux: {
-        displayLabel: '⭐ Octopus Flux (10p overnight, 25p export - BEST)',
+        displayLabel: 'Octopus Flux',
+        recommended: true,
         import: {
             type: 'flat' as const,
             standardRatePence: 24.50, // Day rate
@@ -152,13 +153,14 @@ export const UK_TARIFF_PRESETS = {
             name: 'Octopus Flux Export',
             ratePence: 25.0, // Peak export rate (16:00-19:00) - this is the key!
         },
-        description: 'Flux: 10p overnight import, 25p peak export (best for batteries)',
+        description: 'Best for solar + battery. 10p overnight import, 25p peak export.',
     },
     // Intelligent Octopus Go - great for EV + battery
     // Off-peak 23:30-05:30: 7p
     // Day rate: 24p
     intelligentGo: {
-        displayLabel: 'Intelligent Go (7p overnight, 15p export)',
+        displayLabel: 'Intelligent Go',
+        recommended: false,
         import: {
             type: 'go' as const,
             standardRatePence: 24.50,
@@ -169,11 +171,12 @@ export const UK_TARIFF_PRESETS = {
             name: 'Octopus Outgoing Fixed',
             ratePence: 15.0,
         },
-        description: 'Intelligent Go: 7p overnight (11:30pm-5:30am), 24p day',
+        description: 'Great for EV owners. 7p overnight (23:30-05:30), 24p day rate.',
     },
     // Agile import with Agile Outgoing export
     octopusAgile: {
-        displayLabel: 'Octopus Agile (variable rates)',
+        displayLabel: 'Octopus Agile',
+        recommended: false,
         import: {
             type: 'agile' as const,
             standardRatePence: 20.0, // Average, varies 5p-50p+
@@ -183,11 +186,12 @@ export const UK_TARIFF_PRESETS = {
             name: 'Octopus Agile Outgoing',
             ratePence: 15.0, // Average, can be 30p+ at peak
         },
-        description: 'Agile: Variable rates (avg 20p import, 15p export)',
+        description: 'Variable half-hourly rates. Average 20p import, 15p export.',
     },
     // Standard flexible with fixed export
     octopusFlexible: {
-        displayLabel: 'Octopus Flexible (24.5p flat, 15p export)',
+        displayLabel: 'Octopus Flexible',
+        recommended: false,
         import: {
             type: 'flat' as const,
             standardRatePence: 24.50,
@@ -197,11 +201,12 @@ export const UK_TARIFF_PRESETS = {
             name: 'Octopus Outgoing Fixed',
             ratePence: 15.0,
         },
-        description: 'Flexible: 24.5p flat rate, 15p export',
+        description: 'Simple flat rate. 24.5p import, 15p export.',
     },
     // Standard SEG (low export) - baseline comparison
     standardSEG: {
-        displayLabel: 'Standard + SEG (24.5p import, 4.1p export)',
+        displayLabel: 'Standard + SEG',
+        recommended: false,
         import: {
             type: 'flat' as const,
             standardRatePence: 24.50,
@@ -211,6 +216,6 @@ export const UK_TARIFF_PRESETS = {
             name: 'Smart Export Guarantee',
             ratePence: 4.1, // Basic SEG rate - worst case
         },
-        description: 'Standard + SEG: 24.5p import, only 4.1p export',
+        description: 'Basic export. 24.5p import, only 4.1p export.',
     },
 } as const;

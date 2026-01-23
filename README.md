@@ -8,10 +8,11 @@ A web application that helps UK households calculate the potential savings from 
 
 - **Real Consumption Data**: Connects to Octopus Energy API to fetch your actual half-hourly electricity usage
 - **Location-Based Solar Estimates**: Uses NASA POWER satellite data to estimate solar generation for your postcode
-- **Configurable System**: Adjust PV size (1-10 kWp), battery capacity (0-20 kWh), and tariff rates
+- **Configurable System**: Adjust PV size (1-10 kWp), battery capacity (0-30 kWh), and tariff rates
 - **Detailed Analysis**: Month-by-month breakdown of costs, savings, and energy flows
 - **Visual Charts**: Interactive charts showing energy generation, consumption, and financial impact
 - **Privacy First**: All calculations run in your browser - no data is stored on any server
+- **Dark Mode**: Toggle between light and dark themes
 
 ## How It Works
 
@@ -20,19 +21,38 @@ A web application that helps UK households calculate the potential savings from 
 3. **Configure Your System**: Set your PV size, battery capacity, and electricity tariffs
 4. **View Results**: See potential savings, payback period, and detailed monthly analysis
 
+### Calculation Methodology
+
+The calculator uses the IEC 61724 / PVGIS methodology for solar generation:
+
+```
+E = (G / G_STC) × P_peak × PR × Δt
+```
+
+Where:
+- **E** = Energy output (kWh)
+- **G** = Global Horizontal Irradiance (W/m²)
+- **G_STC** = 1000 W/m² (Standard Test Conditions)
+- **P_peak** = System rated power (kWp)
+- **PR** = Performance ratio (0.80-0.85 for UK)
+- **Δt** = Time interval
+
 ## Tech Stack
 
 - **Frontend**: React 19 + TypeScript 5.9
 - **Build**: Vite 7
 - **Styling**: Tailwind CSS v4 + shadcn/ui
 - **Charts**: Recharts
+- **Testing**: Playwright
 - **Hosting**: Azure Static Web Apps
 
 ## Data Sources
 
-- **Consumption**: [Octopus Energy API](https://developer.octopus.energy/)
-- **Solar Irradiance**: [NASA POWER](https://power.larc.nasa.gov/) (free, no API key required)
-- **Postcode Lookup**: [postcodes.io](https://postcodes.io/) (free, no API key required)
+| Source | Data | Cost | CORS |
+|--------|------|------|------|
+| [Octopus Energy API](https://developer.octopus.energy/) | Half-hourly consumption | Free | Via GraphQL |
+| [NASA POWER](https://power.larc.nasa.gov/) | Solar irradiance | Free | ✅ Yes |
+| [postcodes.io](https://postcodes.io/) | UK postcode → lat/lng | Free | ✅ Yes |
 
 ## Local Development
 
@@ -48,7 +68,46 @@ npm run build
 
 # Run tests
 npm test
+
+# Run tests with UI
+npm run test:ui
+
+# Run tests in headed mode (see browser)
+npm run test:headed
 ```
+
+## Project Structure
+
+```
+src/
+├── components/       # React UI components
+│   ├── scenario-config-panel.tsx  # Left panel configuration
+│   ├── summary-metrics.tsx        # Results summary cards
+│   ├── cost-chart.tsx             # Monthly cost comparison chart
+│   └── ...
+├── hooks/            # React custom hooks
+│   ├── use-consumption-data.ts    # Octopus API integration
+│   ├── use-solar-data.ts          # NASA POWER integration
+│   └── use-simulation.ts          # Simulation runner
+├── lib/              # Core calculation engines
+│   ├── solar-generator.ts         # PV generation calculator
+│   ├── battery-engine.ts          # Battery simulation
+│   └── cost-engine.ts             # Cost calculations
+├── services/         # External API clients
+│   ├── octopus-energy.ts          # Octopus GraphQL client
+│   └── solar-data.ts              # NASA POWER + postcodes.io
+└── types/            # TypeScript type definitions
+```
+
+## Tariff Presets
+
+| Tariff | Import Rate | Export Rate | Best For |
+|--------|-------------|-------------|----------|
+| Octopus Flux ⭐ | 24.5p (10p overnight) | 25p | Solar + battery |
+| Intelligent Go | 24.5p (7p overnight) | 15p | EV owners |
+| Octopus Agile | ~20p (variable) | ~15p | Flexible usage |
+| Octopus Flexible | 24.5p (flat) | 15p | Simplicity |
+| Standard + SEG | 24.5p | 4.1p | No smart export |
 
 ## Privacy & Security
 
@@ -59,10 +118,18 @@ npm test
 
 ## Limitations
 
-- UK only (uses UK postcode lookup and Octopus Energy)
-- Flat-rate tariffs only (no Agile/Tracker optimisation yet)
-- Simple greedy battery dispatch (no price-aware scheduling)
-- No EV or heat pump integration
+- **UK only**: Uses UK postcode lookup and Octopus Energy
+- **Flat-rate tariffs**: No Agile/Tracker real-time optimisation yet
+- **Simple battery dispatch**: Greedy algorithm (use solar first, then battery)
+- **No smart scheduling**: Doesn't optimise for time-of-use tariff peaks
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## Licence
 

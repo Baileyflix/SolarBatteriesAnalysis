@@ -39,7 +39,19 @@ export class SolarGenerator {
 
     /**
      * Calculate PV generation for a single half-hourly interval
-     * Formula: Generation (kWh) = GHI (W/m²) × System Size (kWp) × Performance Ratio × Time (h) / 1000
+     * 
+     * Formula (IEC 61724 / PVGIS methodology):
+     *   E = (G / G_STC) × P_peak × PR × Δt
+     * 
+     * Where:
+     *   E = Energy output (kWh)
+     *   G = Global Horizontal Irradiance (W/m²)
+     *   G_STC = 1000 W/m² (Standard Test Conditions)
+     *   P_peak = System rated power (kWp)
+     *   PR = Performance Ratio (typically 0.75-0.85, accounts for inverter, cables, temp, soiling)
+     *   Δt = Time interval (0.5 hours for half-hourly data)
+     * 
+     * Reference: https://joint-research-centre.ec.europa.eu/photovoltaic-geographical-information-system-pvgis
      */
     private calculateIntervalGeneration(irradiance: IrradianceRecord): GenerationRecord {
         // Standard Test Conditions irradiance is 1000 W/m²
@@ -48,7 +60,7 @@ export class SolarGenerator {
         // Time duration of interval in hours (30 minutes = 0.5 hours)
         const intervalHours = 0.5;
 
-        // Calculate generation using the standard PV equation
+        // Calculate generation using the IEC 61724 PV performance equation
         // PV output scales linearly with irradiance under ideal conditions
         const generationKwh =
             (irradiance.ghi / stcIrradiance) *

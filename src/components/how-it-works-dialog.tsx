@@ -120,7 +120,7 @@ export function HowItWorksDialog({ trigger }: HowItWorksDialogProps) {
                                     <li><strong>PR</strong> = Performance Ratio (0.80 default)</li>
                                 </ul>
                                 <p className="text-xs text-muted-foreground mt-2 italic">
-                                    Based on IEC 61724 methodology. PR accounts for inverter efficiency (~97%), 
+                                    Based on IEC 61724 methodology. PR accounts for inverter efficiency (~97%),
                                     cable losses (~2%), temperature effects (~3-8%), soiling, and mismatch.
                                 </p>
                             </div>
@@ -155,7 +155,7 @@ export function HowItWorksDialog({ trigger }: HowItWorksDialogProps) {
                                     <div>Simple Payback = System Cost ÷ Annual Savings</div>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-2">
-                                    Note: This is a simple payback model. It does not account for electricity price inflation, 
+                                    Note: This is a simple payback model. It does not account for electricity price inflation,
                                     panel degradation (~0.5%/year), or time value of money.
                                 </p>
                             </div>
@@ -178,7 +178,7 @@ export function HowItWorksDialog({ trigger }: HowItWorksDialogProps) {
                     <TabsContent value="sources" className="space-y-4 mt-4">
                         <div className="space-y-3">
                             <h4 className="font-medium text-sm text-muted-foreground">Data APIs</h4>
-                            
+
                             <a
                                 href="https://developer.octopus.energy/"
                                 target="_blank"

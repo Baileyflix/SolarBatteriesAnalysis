@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '../../@/components/ui/card';
-import type { ScenarioComparison, ROICalculation } from '@/types';
+import type { ScenarioComparison, ROICalculation, AnnualFinancialSummary } from '@/types';
 import type { OctopusSolarEstimateSummary } from '@/services/octopus-energy';
 import { TrendingUp, Zap, Battery, ArrowDownToLine, ArrowUpFromLine, PiggyBank, Sun, Info } from 'lucide-react';
 
@@ -8,9 +8,10 @@ interface SummaryMetricsProps {
     roi: ROICalculation | null;
     octopusEstimate?: OctopusSolarEstimateSummary | null;
     pvSystemSizeKwp?: number;
+    solarOnly?: AnnualFinancialSummary | null;
 }
 
-export function SummaryMetrics({ comparison, roi, octopusEstimate, pvSystemSizeKwp }: SummaryMetricsProps) {
+export function SummaryMetrics({ comparison, roi, octopusEstimate, pvSystemSizeKwp, solarOnly }: SummaryMetricsProps) {
     const { baseline, withSolar, annualSavingsPounds, savingsPercentage, selfConsumptionRate, selfSufficiencyRate } = comparison;
 
     // Scale Octopus estimate based on system size (Octopus estimate is for "average" ~4kWp system)
@@ -98,9 +99,31 @@ export function SummaryMetrics({ comparison, roi, octopusEstimate, pvSystemSizeK
                         <span className="text-sm text-muted-foreground">Baseline (no solar):</span>
                         <span className="font-semibold text-lg">£{baseline.totalNetCostPounds.toFixed(0)}</span>
                     </div>
+                    {solarOnly && (
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
+                            <div className="flex items-center gap-2">
+                                <Sun className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                <span className="text-sm text-amber-700 dark:text-amber-300">Solar only (no battery):</span>
+                            </div>
+                            <div className="text-right">
+                                <span className="font-semibold text-lg text-amber-600 dark:text-amber-400">£{solarOnly.totalNetCostPounds.toFixed(0)}</span>
+                                <div className="text-xs text-amber-600/70 dark:text-amber-400/70">
+                                    saves £{(baseline.totalNetCostPounds - solarOnly.totalNetCostPounds).toFixed(0)}/yr
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <div className="flex items-center justify-between p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800">
-                        <span className="text-sm text-emerald-700 dark:text-emerald-300">With solar+battery:</span>
-                        <span className="font-semibold text-lg text-emerald-600 dark:text-emerald-400">£{withSolar.totalNetCostPounds.toFixed(0)}</span>
+                        <div className="flex items-center gap-2">
+                            <Battery className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                            <span className="text-sm text-emerald-700 dark:text-emerald-300">Solar + battery:</span>
+                        </div>
+                        <div className="text-right">
+                            <span className="font-semibold text-lg text-emerald-600 dark:text-emerald-400">£{withSolar.totalNetCostPounds.toFixed(0)}</span>
+                            <div className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
+                                saves £{(baseline.totalNetCostPounds - withSolar.totalNetCostPounds).toFixed(0)}/yr
+                            </div>
+                        </div>
                     </div>
                 </CardContent>
             </Card>

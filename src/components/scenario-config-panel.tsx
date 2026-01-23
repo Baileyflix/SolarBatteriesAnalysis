@@ -3,11 +3,13 @@ import { Label } from '../../@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../@/components/ui/select';
 import { Input } from '../../@/components/ui/input';
 import { Slider } from '../../@/components/ui/slider';
-import { Sun, Battery, Zap, Settings2 } from 'lucide-react';
+import { Button } from '../../@/components/ui/button';
+import { Sun, Battery, Zap, Settings2, Info, RefreshCw, PoundSterling } from 'lucide-react';
 import { UK_BATTERY_PRESETS } from '@/lib/battery-engine';
 import { UK_PV_PRESETS } from '@/lib/solar-generator';
 import { UK_TARIFF_PRESETS } from '@/lib/cost-engine';
 import type { BatteryConfig, TariffConfig, PVSystemConfig } from '@/types';
+import { useState } from 'react';
 
 type PVPresetKey = keyof typeof UK_PV_PRESETS;
 type BatteryPresetKey = keyof typeof UK_BATTERY_PRESETS;
@@ -27,9 +29,43 @@ interface ScenarioConfig {
 interface ScenarioConfigPanelProps {
     config: ScenarioConfig;
     onChange: (config: ScenarioConfig) => void;
+    onRunSimulation?: () => void;
+    isLoading?: boolean;
+    hasChanges?: boolean;
 }
 
-export function ScenarioConfigPanel({ config, onChange }: ScenarioConfigPanelProps) {
+/** Info tooltip component */
+function InfoTooltip({ text }: { text: string }) {
+    const [isVisible, setIsVisible] = useState(false);
+
+    return (
+        <div className="relative inline-block">
+            <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                onMouseEnter={() => setIsVisible(true)}
+                onMouseLeave={() => setIsVisible(false)}
+                onClick={() => setIsVisible(!isVisible)}
+                aria-label="More information"
+            >
+                <Info className="h-3.5 w-3.5" />
+            </button>
+            {isVisible && (
+                <div className="absolute z-50 left-0 bottom-full mb-2 w-56 p-2 text-xs bg-popover text-popover-foreground border rounded-md shadow-lg">
+                    {text}
+                </div>
+            )}
+        </div>
+    );
+}
+
+export function ScenarioConfigPanel({
+    config,
+    onChange,
+    onRunSimulation,
+    isLoading = false,
+    hasChanges = false,
+}: ScenarioConfigPanelProps) {
     const handlePvPresetChange = (preset: PVPresetKey): void => {
         const pvConfig = UK_PV_PRESETS[preset];
         onChange({
@@ -141,21 +177,24 @@ export function ScenarioConfigPanel({ config, onChange }: ScenarioConfigPanelPro
                             </Select>
                         </div>
                         <div className="grid gap-2">
-                            <div className="flex justify-between text-xs">
-                                <span className="text-muted-foreground">System Size</span>
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="flex items-center gap-1.5 text-muted-foreground">
+                                    System Size
+                                    <InfoTooltip text="Peak power output of your solar panels (kWp). A typical 400W panel = 0.4 kWp. Small systems (3.5 kWp) have ~9 panels, medium (5 kWp) ~12 panels, large (7 kWp) ~18 panels. Octopus considers up to 4 kWp as standard domestic." />
+                                </span>
                                 <span className="font-medium">{config.pvSystem.systemSizeKwp.toFixed(1)} kWp</span>
                             </div>
                             <Slider
                                 value={[config.pvSystem.systemSizeKwp]}
                                 onValueChange={handlePvSizeChange}
                                 min={1}
-                                max={15}
+                                max={10}
                                 step={0.5}
                                 className="py-2"
                             />
                             <div className="flex justify-between text-xs text-muted-foreground">
-                                <span>1 kWp</span>
-                                <span>15 kWp</span>
+                                <span>1 kWp (~3 panels)</span>
+                                <span>10 kWp (~25 panels)</span>
                             </div>
                         </div>
                     </div>
@@ -182,8 +221,11 @@ export function ScenarioConfigPanel({ config, onChange }: ScenarioConfigPanelPro
                             </Select>
                         </div>
                         <div className="grid gap-2">
-                            <div className="flex justify-between text-xs">
-                                <span className="text-muted-foreground">Capacity</span>
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="flex items-center gap-1.5 text-muted-foreground">
+                                    Capacity
+                                    <InfoTooltip text="The amount of energy your battery can store in kilowatt-hours (kWh). A typical UK home uses 8-10 kWh per day. Set to 0 to see results without a battery." />
+                                </span>
                                 <span className="font-medium">{config.battery.capacityKwh.toFixed(1)} kWh</span>
                             </div>
                             <Slider
@@ -216,27 +258,43 @@ export function ScenarioConfigPanel({ config, onChange }: ScenarioConfigPanelPro
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {(Object.keys(UK_TARIFF_PRESETS) as Array<keyof typeof UK_TARIFF_PRESETS>).map((key) => (
-                                        <SelectItem key={key} value={key}>
-                                            {UK_TARIFF_PRESETS[key].displayLabel}
-                                        </SelectItem>
-                                    ))}
+                                    {(Object.keys(UK_TARIFF_PRESETS) as Array<keyof typeof UK_TARIFF_PRESETS>).map((key) => {
+                                        const tariff = UK_TARIFF_PRESETS[key];
+                                        return (
+                                            <SelectItem key={key} value={key}>
+                                                <span className="flex items-center gap-2">
+                                                    {tariff.displayLabel}
+                                                    {tariff.recommended && (
+                                                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+                                                            BEST
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </SelectItem>
+                                        );
+                                    })}
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="grid gap-1">
-                                <Label htmlFor="importRate" className="text-xs text-muted-foreground">Import Rate</Label>
-                                <div className="flex items-center gap-1">
-                                    <span className="text-sm font-medium">{config.tariff.import.standardRatePence.toFixed(1)}p</span>
-                                    <span className="text-xs text-muted-foreground">/kWh</span>
+                        {/* Tariff Details Card */}
+                        <div className="p-3 bg-muted/50 rounded-lg space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                                {UK_TARIFF_PRESETS[config.tariffPreset].description}
+                            </p>
+                            <div className="grid grid-cols-2 gap-3 pt-1">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-red-400" />
+                                    <div>
+                                        <span className="text-xs text-muted-foreground">Import</span>
+                                        <p className="text-sm font-medium">{config.tariff.import.standardRatePence.toFixed(1)}p<span className="text-xs text-muted-foreground">/kWh</span></p>
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="grid gap-1">
-                                <Label htmlFor="exportRate" className="text-xs text-muted-foreground">Export Rate</Label>
-                                <div className="flex items-center gap-1">
-                                    <span className="text-sm font-medium">{config.tariff.export.ratePence.toFixed(1)}p</span>
-                                    <span className="text-xs text-muted-foreground">/kWh</span>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-green-400" />
+                                    <div>
+                                        <span className="text-xs text-muted-foreground">Export</span>
+                                        <p className="text-sm font-medium">{config.tariff.export.ratePence.toFixed(1)}p<span className="text-xs text-muted-foreground">/kWh</span></p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -244,32 +302,66 @@ export function ScenarioConfigPanel({ config, onChange }: ScenarioConfigPanelPro
                 </div>
 
                 {/* Financial Inputs */}
-                <div className="grid grid-cols-2 gap-4 pt-2 border-t">
-                    <div className="grid gap-2">
-                        <Label htmlFor="systemCost" className="text-xs text-muted-foreground">System Cost (£)</Label>
-                        <Input
-                            id="systemCost"
-                            type="number"
-                            step="100"
-                            value={config.systemCost || ''}
-                            onChange={handleSystemCostChange}
-                            placeholder="10000"
-                            className="h-9"
-                        />
+                <div className="space-y-4 pt-2 border-t">
+                    <div className="flex items-center gap-2">
+                        <PoundSterling className="h-4 w-4 text-emerald-600" />
+                        <Label className="text-sm font-medium">Financial Details</Label>
                     </div>
-                    <div className="grid gap-2">
-                        <Label htmlFor="monthlyDD" className="text-xs text-muted-foreground">Monthly DD (£)</Label>
-                        <Input
-                            id="monthlyDD"
-                            type="number"
-                            step="5"
-                            value={config.monthlyDirectDebit || ''}
-                            onChange={handleDirectDebitChange}
-                            placeholder="150"
-                            className="h-9"
-                        />
+                    <div className="grid grid-cols-2 gap-4 pl-6">
+                        <div className="grid gap-2">
+                            <Label htmlFor="systemCost" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                System Cost (£)
+                                <InfoTooltip text="Total installation cost for solar panels and battery. UK average is £8,000-12,000 for panels plus £2,500-5,000 per 5kWh of battery." />
+                            </Label>
+                            <Input
+                                id="systemCost"
+                                type="number"
+                                step="100"
+                                value={config.systemCost || ''}
+                                onChange={handleSystemCostChange}
+                                placeholder="10000"
+                                className="h-9"
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="monthlyDD" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                Monthly DD (£)
+                                <InfoTooltip text="Your current monthly Direct Debit to your energy supplier. Used to calculate potential savings." />
+                            </Label>
+                            <Input
+                                id="monthlyDD"
+                                type="number"
+                                step="5"
+                                value={config.monthlyDirectDebit || ''}
+                                onChange={handleDirectDebitChange}
+                                placeholder="150"
+                                className="h-9"
+                            />
+                        </div>
                     </div>
                 </div>
+
+                {/* Update Results Button */}
+                {onRunSimulation && (
+                    <Button
+                        onClick={onRunSimulation}
+                        disabled={isLoading}
+                        className="w-full"
+                        size="lg"
+                    >
+                        {isLoading ? (
+                            <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Calculating...
+                            </>
+                        ) : (
+                            <>
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                {hasChanges ? 'Update Results' : 'Recalculate'}
+                            </>
+                        )}
+                    </Button>
+                )}
             </CardContent>
         </Card>
     );

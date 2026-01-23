@@ -13,7 +13,7 @@ import { useConsumptionData } from '@/hooks/use-consumption-data';
 import { useSolarData } from '@/hooks/use-solar-data';
 import { useSimulation } from '@/hooks/use-simulation';
 import { useOctopusSolarEstimate } from '@/hooks/use-octopus-solar-estimate';
-import { AlertCircle, Zap, RefreshCw, Loader2, PlugZap, LogOut } from 'lucide-react';
+import { AlertCircle, Zap, RefreshCw, Loader2, PlugZap, LogOut, Moon, Sun, BarChart3, Activity, Table, Github, Calendar } from 'lucide-react';
 import { Badge } from '../@/components/ui/badge';
 import { UK_BATTERY_PRESETS } from '@/lib/battery-engine';
 import { UK_PV_PRESETS } from '@/lib/solar-generator';
@@ -66,6 +66,19 @@ function App() {
 
   // Track active tab
   const [activeTab, setActiveTab] = useState('results');
+
+  // Theme toggle
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return document.documentElement.classList.contains('dark') ||
+        window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDark);
+  }, [isDark]);
 
   // Check if PV system config changed (needs new solar generation)
   useEffect(() => {
@@ -225,6 +238,15 @@ function App() {
             </div>
             <div className="flex items-center gap-2">
               <HowItWorksDialog />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsDark(!isDark)}
+                className="text-white/90 hover:text-white hover:bg-white/10"
+                aria-label="Toggle theme"
+              >
+                {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </Button>
             </div>
           </div>
         </div>
@@ -254,7 +276,17 @@ function App() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Connected to Octopus</p>
-                      <p className="text-xs text-emerald-600 dark:text-emerald-400">{storedPostcode}</p>
+                      <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+                        <span>{storedPostcode}</span>
+                        {storedDateRange && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {new Date(storedDateRange.from).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })}
+                            {' - '}
+                            {new Date(storedDateRange.to).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <Button
@@ -274,10 +306,13 @@ function App() {
             <ScenarioConfigPanel
               config={scenarioConfig}
               onChange={handleScenarioChange}
+              onRunSimulation={isConnected ? handleRegenerateSolar : undefined}
+              isLoading={solarData.loading || simulation.loading}
+              hasChanges={needsRegeneration}
             />
 
-            {/* Regeneration Warning */}
-            {needsRegeneration && isConnected && (
+            {/* Regeneration Warning - Only show when solar specifically needs recalc */}
+            {needsRegeneration && isConnected && !solarData.loading && (
               <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-900 rounded-lg">
                 <div className="flex items-start gap-3">
                   <RefreshCw className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
@@ -321,9 +356,18 @@ function App() {
             {!loading && (
               <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                 <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="results">Results</TabsTrigger>
-                  <TabsTrigger value="energy">Energy</TabsTrigger>
-                  <TabsTrigger value="breakdown">Breakdown</TabsTrigger>
+                  <TabsTrigger value="results" className="flex items-center gap-1.5">
+                    <BarChart3 className="h-4 w-4" />
+                    <span className="hidden sm:inline">Results</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="energy" className="flex items-center gap-1.5">
+                    <Activity className="h-4 w-4" />
+                    <span className="hidden sm:inline">Energy</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="breakdown" className="flex items-center gap-1.5">
+                    <Table className="h-4 w-4" />
+                    <span className="hidden sm:inline">Breakdown</span>
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
@@ -350,6 +394,7 @@ function App() {
                         roi={simulation.roi}
                         octopusEstimate={octopusSolarEstimate.estimate}
                         pvSystemSizeKwp={scenarioConfig.pvSystem.systemSizeKwp}
+                        solarOnly={simulation.solarOnly}
                       />
 
                       {simulation.baseline && simulation.withSolar && (
@@ -415,11 +460,25 @@ function App() {
 
       {/* Footer */}
       <footer className="border-t bg-muted/30 py-4 mt-auto">
-        <div className="container mx-auto px-4 md:px-8 text-center text-sm text-muted-foreground">
-          <p>
-            ⚠️ These are estimates only — please do your own research before making any decisions.{' '}
-            <LegalDialogs trigger={<button className="underline hover:text-foreground">More info</button>} />
-          </p>
+        <div className="container mx-auto px-4 md:px-8">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted-foreground">
+            <p className="text-center sm:text-left">
+              ⚠️ Estimates only — do your own research before making decisions.{' '}
+              <LegalDialogs trigger={<button className="underline hover:text-foreground">More info</button>} />
+            </p>
+            <div className="flex items-center gap-3">
+              <a
+                href="https://github.com/Chronickle/SolarBatteriesAnalysis"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 hover:text-foreground transition-colors"
+              >
+                <Github className="h-4 w-4" />
+                <span className="hidden sm:inline">Source</span>
+              </a>
+              <span className="text-xs">v1.0.0</span>
+            </div>
+          </div>
         </div>
       </footer>
 
