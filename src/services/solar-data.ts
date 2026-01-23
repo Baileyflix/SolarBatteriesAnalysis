@@ -51,12 +51,18 @@ export interface LocationCoordinates {
 /**
  * Client for fetching historical solar irradiance data
  * Uses NASA POWER API (free, no API key required for basic usage)
- * Proxied through Vite dev server to avoid CORS issues
+ * In development, proxied through Vite dev server
+ * In production, calls NASA POWER API directly (CORS enabled)
  */
 export class SolarDataClient {
     private readonly client: AxiosInstance;
 
-    constructor(baseURL = '/api/nasa-power/api/temporal/daily/point') {
+    constructor() {
+        // NASA POWER API has CORS enabled, call directly in production
+        const baseURL = import.meta.env.DEV
+            ? '/api/nasa-power/api/temporal/daily/point'
+            : 'https://power.larc.nasa.gov/api/temporal/daily/point';
+        
         this.client = axios.create({
             baseURL,
             timeout: 30000,
@@ -319,14 +325,20 @@ interface PostcodesIOResponse {
 
 /**
  * Convert UK postcode to coordinates using postcodes.io (free API)
- * Proxied through Vite dev server to avoid CORS issues
+ * In development, proxied through Vite dev server
+ * In production, calls postcodes.io directly (CORS enabled)
  */
 export async function postcodeToCoordinates(postcode: string): Promise<LocationCoordinates> {
     const cleanPostcode = postcode.trim().replace(/\s+/g, '');
+    
+    // postcodes.io has CORS enabled, call directly in production
+    const baseUrl = import.meta.env.DEV
+        ? '/api/postcodes'
+        : 'https://api.postcodes.io';
 
     try {
         const response = await axios.get<PostcodesIOResponse>(
-            `/api/postcodes/postcodes/${encodeURIComponent(cleanPostcode)}`
+            `${baseUrl}/postcodes/${encodeURIComponent(cleanPostcode)}`
         );
 
         if (response.data.status === 200 && response.data.result) {

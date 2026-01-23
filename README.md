@@ -1,169 +1,69 @@
-## Phase 0 – Repo & framing (no Copilot yet)
+# Solar + Battery ROI Calculator
 
-Before you even open the IDE, write this in your head (or README):
+A web application that helps UK households calculate the potential savings from installing solar PV panels and battery storage, using their actual electricity consumption data from Octopus Energy.
 
-**Product sentence**
+🌐 **Live Demo**: [solar-batteries-calculator.azurestaticapps.net](https://polite-plant-0ba640c03.1.azurestaticapps.net)
 
-> “Replay the last 12 months of a household’s energy usage with a simulated solar PV + battery system and compare monthly net cost vs their actual Octopus Energy bill and direct debit.”
+## Features
 
-**Core constraints**
+- **Real Consumption Data**: Connects to Octopus Energy API to fetch your actual half-hourly electricity usage
+- **Location-Based Solar Estimates**: Uses NASA POWER satellite data to estimate solar generation for your postcode
+- **Configurable System**: Adjust PV size (1-10 kWp), battery capacity (0-20 kWh), and tariff rates
+- **Detailed Analysis**: Month-by-month breakdown of costs, savings, and energy flows
+- **Visual Charts**: Interactive charts showing energy generation, consumption, and financial impact
+- **Privacy First**: All calculations run in your browser - no data is stored on any server
 
-* Half-hourly resolution
-* Deterministic (no ML)
-* Local processing
-* Pluggable data sources
+## How It Works
 
----
+1. **Connect Your Octopus Account**: Enter your API key to fetch 12 months of consumption history
+2. **Enter Your Postcode**: We use this to get solar irradiance data for your location
+3. **Configure Your System**: Set your PV size, battery capacity, and electricity tariffs
+4. **View Results**: See potential savings, payback period, and detailed monthly analysis
 
-## Phase 1 – Skeleton without logic
+## Tech Stack
 
-Goal: create the shape of the system so Copilot can fill in boxes.
+- **Frontend**: React 19 + TypeScript 5.9
+- **Build**: Vite 7
+- **Styling**: Tailwind CSS v4 + shadcn/ui
+- **Charts**: Recharts
+- **Hosting**: Azure Static Web Apps
 
-Create empty modules:
+## Data Sources
 
-```
-/src
-  /octopus
-    client.ts
-    types.ts
-  /solar
-    irradiance.ts
-    pv_model.ts
-  /battery
-    battery_model.ts
-  /tariff
-    tariff_model.ts
-  /simulation
-    energy_flow.ts
-    monthly_aggregation.ts
-  main.ts
-```
+- **Consumption**: [Octopus Energy API](https://developer.octopus.energy/)
+- **Solar Irradiance**: [NASA POWER](https://power.larc.nasa.gov/) (free, no API key required)
+- **Postcode Lookup**: [postcodes.io](https://postcodes.io/) (free, no API key required)
 
-Copilot prompt style (token-cheap):
+## Local Development
 
-> Create TypeScript interfaces for half-hourly energy records, PV generation records, and simulation results. No implementation yet.
+```bash
+# Install dependencies
+npm install
 
-You’re teaching it your domain language first.
+# Start development server
+npm run dev
 
----
+# Build for production
+npm run build
 
-## Phase 2 – Octopus data pull (high value, small surface)
-
-Single bounded task:
-
-> Implement a function that fetches the last 12 months of half-hourly consumption from the Octopus Energy API given an API key and MPAN. Return an array of `{ timestamp, kWh }`. No UI, no storage.
-
-Stop there. Don’t let it drift.
-
----
-
-## Phase 3 – Solar generation model (simple first)
-
-Avoid asking for “accurate physics”. Ask for:
-
-> Implement a PV generation estimator that converts half-hourly irradiance (W/m²) into kWh output for a system size in kWp using a fixed performance ratio (e.g. 0.85).
-
-That keeps tokens low and logic transparent.
-
----
-
-## Phase 4 – Battery dispatch (core logic, still tight)
-
-Very precise:
-
-> Implement a greedy battery model:
->
-> * Inputs: capacity kWh, max charge/discharge kW, round-trip efficiency
-> * For each half-hour:
->
->   * Use PV to meet load
->   * Excess charges battery
->   * Shortfall discharges battery
->   * Remainder imports from grid or exports
->     Return time series of grid import, grid export, battery SoC.
-
-No fluff, no commentary.
-
----
-
-## Phase 5 – Tariff & cost replay
-
-Prompt:
-
-> Given half-hourly import/export kWh and a tariff with time-of-use rates, compute total cost and revenue per month. Support flat rate first.
-
-Again: narrow.
-
----
-
-## Phase 6 – Monthly direct debit comparison
-
-This is your differentiator:
-
-> Aggregate monthly net cost and compare against a fixed monthly direct debit. Output running balance (credit/debit) by month.
-
----
-
-## Phase 7 – Minimal UI or CLI
-
-Only now:
-
-> Create a simple CLI that:
->
-> 1. Reads Octopus API key
-> 2. Reads system config (PV size, battery size, tariff, DD)
-> 3. Runs simulation
-> 4. Prints monthly table and cumulative balance
-
----
-
-## Token-Optimisation Rules for You
-
-These will save you *hundreds of tokens per session*:
-
-### 1. Never say “build an app that…”
-
-Always say:
-
-> In file X, implement function Y with signature Z. Do not add extra features.
-
-### 2. Forbid verbosity explicitly
-
-Add to every Copilot prompt:
-
-> Return only code. No explanation.
-
-### 3. One responsibility per prompt
-
-If you see “and also” in your prompt, split it.
-
-### 4. Lock interfaces early
-
-Once you have:
-
-```ts
-interface HalfHourlyRecord {
-  timestamp: Date
-  kWh: number
-}
+# Run tests
+npm test
 ```
 
-Reuse it everywhere so Copilot doesn’t reinvent shapes.
+## Privacy & Security
 
----
+- Your Octopus API key is only used client-side and is never sent to our servers
+- All energy calculations happen in your browser
+- No personal data is collected or stored
+- The app is open source - you can verify exactly what it does
 
-## Phase Order Summary (printable roadmap)
+## Limitations
 
-1. Define core data types (no logic)
-2. Octopus consumption fetch
-3. Solar irradiance ingestion
-4. PV generation model
-5. Battery dispatch model
-6. Grid import/export calculation
-7. Tariff cost engine
-8. Monthly aggregation
-9. Direct debit comparison
-10. CLI / minimal UI
-11. Visualisation (later, optional)
+- UK only (uses UK postcode lookup and Octopus Energy)
+- Flat-rate tariffs only (no Agile/Tracker optimisation yet)
+- Simple greedy battery dispatch (no price-aware scheduling)
+- No EV or heat pump integration
 
----
+## Licence
+
+MIT
