@@ -62,7 +62,7 @@ export class SolarDataClient {
         const baseURL = import.meta.env.DEV
             ? '/api/nasa-power/api/temporal/daily/point'
             : 'https://power.larc.nasa.gov/api/temporal/daily/point';
-        
+
         this.client = axios.create({
             baseURL,
             timeout: 30000,
@@ -330,7 +330,7 @@ interface PostcodesIOResponse {
  */
 export async function postcodeToCoordinates(postcode: string): Promise<LocationCoordinates> {
     const cleanPostcode = postcode.trim().replace(/\s+/g, '');
-    
+
     // postcodes.io has CORS enabled, call directly in production
     const baseUrl = import.meta.env.DEV
         ? '/api/postcodes'

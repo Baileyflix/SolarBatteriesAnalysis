@@ -9,7 +9,7 @@ import {
 } from '../../@/components/ui/dialog';
 import { Button } from '../../@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../@/components/ui/tabs';
-import { Info, Calculator, Sun, Battery, Zap, PiggyBank, ExternalLink } from 'lucide-react';
+import { Info, Calculator, Sun, Battery, Zap, PiggyBank, ExternalLink, BookOpen } from 'lucide-react';
 
 interface HowItWorksDialogProps {
     trigger?: React.ReactNode;
@@ -107,69 +107,78 @@ export function HowItWorksDialog({ trigger }: HowItWorksDialogProps) {
                             <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-2">
                                 <h4 className="font-medium flex items-center gap-2">
                                     <Sun className="h-4 w-4 text-amber-500" />
-                                    Solar Generation
+                                    PV Generation (Industry Standard)
                                 </h4>
                                 <div className="font-mono text-sm bg-white dark:bg-slate-800 p-3 rounded border">
-                                    Generation (kWh) = GHI × System Size × Performance Ratio
+                                    E = G × P<sub>peak</sub> × PR / G<sub>STC</sub>
                                 </div>
                                 <ul className="text-sm text-muted-foreground space-y-1">
-                                    <li><strong>GHI</strong> = Global Horizontal Irradiance (kWh/m²/day) from NASA</li>
-                                    <li><strong>System Size</strong> = Your panel capacity in kWp</li>
-                                    <li><strong>Performance Ratio</strong> = 0.80 (accounts for real-world losses)</li>
+                                    <li><strong>E</strong> = Energy output (kWh)</li>
+                                    <li><strong>G</strong> = Global Horizontal Irradiance (kWh/m²/day)</li>
+                                    <li><strong>P<sub>peak</sub></strong> = System rated power (kWp)</li>
+                                    <li><strong>G<sub>STC</sub></strong> = 1 kW/m² (Standard Test Conditions)</li>
+                                    <li><strong>PR</strong> = Performance Ratio (0.80 default)</li>
                                 </ul>
+                                <p className="text-xs text-muted-foreground mt-2 italic">
+                                    Based on IEC 61724 methodology. PR accounts for inverter efficiency (~97%), 
+                                    cable losses (~2%), temperature effects (~3-8%), soiling, and mismatch.
+                                </p>
                             </div>
 
                             <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-2">
                                 <h4 className="font-medium flex items-center gap-2">
                                     <Battery className="h-4 w-4 text-green-500" />
-                                    Battery Energy Flow
+                                    Battery Dispatch Logic
                                 </h4>
-                                <div className="font-mono text-sm bg-white dark:bg-slate-800 p-3 rounded border space-y-1">
-                                    <div>Self-consumed = min(Generation, Consumption)</div>
-                                    <div>Excess = Generation - Self-consumed</div>
-                                    <div>Battery Charge = min(Excess × √Efficiency, Capacity Available)</div>
-                                    <div>Grid Export = Excess - Battery Charge</div>
+                                <div className="font-mono text-xs bg-white dark:bg-slate-800 p-3 rounded border space-y-1">
+                                    <div>1. Solar meets load directly (no loss)</div>
+                                    <div>2. Excess → Battery (×√η on charge)</div>
+                                    <div>3. Remaining excess → Grid export</div>
+                                    <div>4. Shortfall ← Battery (×√η on discharge)</div>
+                                    <div>5. Remaining shortfall ← Grid import</div>
                                 </div>
                                 <ul className="text-sm text-muted-foreground space-y-1">
-                                    <li><strong>Round-trip Efficiency</strong> = 90% (split √90% each way)</li>
-                                    <li><strong>Min SoC</strong> = 10% (battery reserve)</li>
-                                    <li><strong>Max SoC</strong> = 100%</li>
+                                    <li><strong>η (Round-trip)</strong> = 90% (√90% ≈ 95% each way)</li>
+                                    <li><strong>Depth of Discharge</strong> = 90% (10% reserve)</li>
+                                    <li><strong>Max C-rate</strong> = 0.5C charge/discharge</li>
                                 </ul>
                             </div>
 
                             <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-2">
                                 <h4 className="font-medium flex items-center gap-2">
                                     <PiggyBank className="h-4 w-4 text-emerald-500" />
-                                    Financial Calculations
+                                    Financial Model
                                 </h4>
-                                <div className="font-mono text-sm bg-white dark:bg-slate-800 p-3 rounded border space-y-1">
-                                    <div>Import Cost = Grid Import (kWh) × Import Rate (p/kWh)</div>
-                                    <div>Export Revenue = Grid Export (kWh) × Export Rate (p/kWh)</div>
-                                    <div>Net Cost = Import Cost + Standing Charge - Export Revenue</div>
-                                    <div>Annual Savings = Baseline Cost - Solar+Battery Cost</div>
-                                    <div>Payback Years = System Cost ÷ Annual Savings</div>
+                                <div className="font-mono text-xs bg-white dark:bg-slate-800 p-3 rounded border space-y-1">
+                                    <div>Daily Cost = (Import × Rate) + Standing − (Export × SEG)</div>
+                                    <div>Savings = Baseline Cost − Solar+Battery Cost</div>
+                                    <div>Simple Payback = System Cost ÷ Annual Savings</div>
                                 </div>
+                                <p className="text-xs text-muted-foreground mt-2">
+                                    Note: This is a simple payback model. It does not account for electricity price inflation, 
+                                    panel degradation (~0.5%/year), or time value of money.
+                                </p>
                             </div>
 
-                            <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-2">
-                                <h4 className="font-medium flex items-center gap-2">
-                                    <Zap className="h-4 w-4 text-amber-500" />
-                                    Battery Arbitrage (Time-of-Use Tariffs)
+                            <div className="p-4 bg-amber-50 dark:bg-amber-950/50 rounded-lg space-y-2">
+                                <h4 className="font-medium flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                                    <Info className="h-4 w-4" />
+                                    Model Limitations
                                 </h4>
-                                <div className="font-mono text-sm bg-white dark:bg-slate-800 p-3 rounded border space-y-1">
-                                    <div>Overnight Charge = Battery capacity charged at off-peak rate</div>
-                                    <div>Peak Export = Battery discharge during peak hours (4-7pm)</div>
-                                    <div>Arbitrage Profit = (Export Rate - Off-peak Rate) × kWh</div>
-                                </div>
-                                <p className="text-sm text-muted-foreground">
-                                    Example: Octopus Flux charges at 10p overnight, exports at 25p peak = 15p/kWh profit
-                                </p>
+                                <ul className="text-xs text-amber-700 dark:text-amber-300 space-y-1">
+                                    <li>• Uses horizontal irradiance (real panels are tilted ~35°, gaining ~10-15%)</li>
+                                    <li>• No shading analysis (nearby buildings/trees can reduce output)</li>
+                                    <li>• Assumes south-facing installation (optimal for UK)</li>
+                                    <li>• Greedy dispatch only (no price-optimised charging)</li>
+                                </ul>
                             </div>
                         </div>
                     </TabsContent>
 
                     <TabsContent value="sources" className="space-y-4 mt-4">
                         <div className="space-y-3">
+                            <h4 className="font-medium text-sm text-muted-foreground">Data APIs</h4>
+                            
                             <a
                                 href="https://developer.octopus.energy/"
                                 target="_blank"
@@ -191,7 +200,7 @@ export function HowItWorksDialog({ trigger }: HowItWorksDialogProps) {
                             >
                                 <div>
                                     <h4 className="font-medium">NASA POWER</h4>
-                                    <p className="text-sm text-muted-foreground">Satellite-derived solar irradiance data</p>
+                                    <p className="text-sm text-muted-foreground">Satellite-derived solar irradiance (CERES/MERRA-2)</p>
                                 </div>
                                 <ExternalLink className="h-4 w-4 text-muted-foreground" />
                             </a>
@@ -205,6 +214,40 @@ export function HowItWorksDialog({ trigger }: HowItWorksDialogProps) {
                                 <div>
                                     <h4 className="font-medium">Postcodes.io</h4>
                                     <p className="text-sm text-muted-foreground">UK postcode to lat/long conversion</p>
+                                </div>
+                                <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                            </a>
+
+                            <h4 className="font-medium text-sm text-muted-foreground mt-4">Methodology References</h4>
+
+                            <a
+                                href="https://joint-research-centre.ec.europa.eu/photovoltaic-geographical-information-system-pvgis/getting-started-pvgis/pvgis-data-sources-calculation-methods_en"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            >
+                                <div>
+                                    <h4 className="font-medium flex items-center gap-2">
+                                        <BookOpen className="h-4 w-4 text-blue-500" />
+                                        EU JRC PVGIS
+                                    </h4>
+                                    <p className="text-sm text-muted-foreground">PV calculation methodology & validation data</p>
+                                </div>
+                                <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                            </a>
+
+                            <a
+                                href="https://www.pveducation.org/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            >
+                                <div>
+                                    <h4 className="font-medium flex items-center gap-2">
+                                        <BookOpen className="h-4 w-4 text-blue-500" />
+                                        PV Education
+                                    </h4>
+                                    <p className="text-sm text-muted-foreground">Solar cell theory & calculation fundamentals</p>
                                 </div>
                                 <ExternalLink className="h-4 w-4 text-muted-foreground" />
                             </a>
