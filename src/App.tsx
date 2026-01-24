@@ -335,17 +335,21 @@ function App() {
                 </TabsContent>
 
                 <TabsContent value="energy" className="space-y-6">
-                  {simulation.solarOnly && simulation.withSolar && (
+                  {simulation.baseline && simulation.solarOnly && simulation.withSolar && (
                     <ScenarioSelector
                       selected={ui.selectedScenario}
                       onSelect={actions.setSelectedScenario}
+                      showBaseline={true}
                     />
                   )}
-                  {simulation.withSolar && simulation.solarOnly ? (
+                  {simulation.baseline && simulation.withSolar && simulation.solarOnly ? (
                     <EnergyFlowChart
-                      monthlyData={ui.selectedScenario === 'withSolar'
-                        ? simulation.withSolar.monthlyBreakdown
-                        : simulation.solarOnly.monthlyBreakdown
+                      monthlyData={
+                        ui.selectedScenario === 'baseline'
+                          ? simulation.baseline.monthlyBreakdown
+                          : ui.selectedScenario === 'withSolar'
+                            ? simulation.withSolar.monthlyBreakdown
+                            : simulation.solarOnly.monthlyBreakdown
                       }
                       scenario={ui.selectedScenario}
                     />
@@ -355,17 +359,21 @@ function App() {
                 </TabsContent>
 
                 <TabsContent value="breakdown" className="space-y-6">
-                  {simulation.solarOnly && simulation.withSolar && (
+                  {simulation.baseline && simulation.solarOnly && simulation.withSolar && (
                     <ScenarioSelector
                       selected={ui.selectedScenario}
                       onSelect={actions.setSelectedScenario}
+                      showBaseline={true}
                     />
                   )}
-                  {simulation.withSolar && simulation.solarOnly ? (
+                  {simulation.baseline && simulation.withSolar && simulation.solarOnly ? (
                     <ResultsTable
-                      monthlyData={ui.selectedScenario === 'withSolar'
-                        ? simulation.withSolar.monthlyBreakdown
-                        : simulation.solarOnly.monthlyBreakdown
+                      monthlyData={
+                        ui.selectedScenario === 'baseline'
+                          ? simulation.baseline.monthlyBreakdown
+                          : ui.selectedScenario === 'withSolar'
+                            ? simulation.withSolar.monthlyBreakdown
+                            : simulation.solarOnly.monthlyBreakdown
                       }
                       scenario={ui.selectedScenario}
                     />

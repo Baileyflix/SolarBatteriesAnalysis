@@ -18,7 +18,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { UK_BATTERY_PRESETS } from '@/lib/battery-engine';
 import { UK_PV_PRESETS } from '@/lib/solar-generator';
 import { UK_TARIFF_PRESETS } from '@/lib/cost-engine';
-import type { ConsumptionTimeSeries, GenerationTimeSeries, TariffConfig } from '@/types';
+import type { ConsumptionTimeSeries, GenerationTimeSeries, TariffConfig, ScenarioType } from '@/types';
 import type { ScenarioConfig } from '@/components/scenario-config-panel';
 
 // Re-export for backward compatibility
@@ -89,7 +89,7 @@ export interface AppState {
   ui: {
     isDark: boolean;
     activeTab: string;
-    selectedScenario: 'solarOnly' | 'withSolar';
+    selectedScenario: ScenarioType;
   };
   
   /** Actions to modify state */
@@ -114,7 +114,7 @@ export interface AppState {
     
     // UI
     setActiveTab: (tab: string) => void;
-    setSelectedScenario: (scenario: 'solarOnly' | 'withSolar') => void;
+    setSelectedScenario: (scenario: ScenarioType) => void;
     toggleTheme: () => void;
     setTheme: (dark: boolean) => void;
   };
@@ -142,7 +142,7 @@ export function useAppState(): AppState {
 
   // UI state
   const [activeTab, setActiveTab] = useState('results');
-  const [selectedScenario, setSelectedScenario] = useState<'solarOnly' | 'withSolar'>('withSolar');
+  const [selectedScenario, setSelectedScenario] = useState<ScenarioType>('withSolar');
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
       return document.documentElement.classList.contains('dark') ||

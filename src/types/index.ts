@@ -53,3 +53,6 @@ export type {
     ROICalculation,
     RunningBalance,
 } from './financial';
+
+// UI types
+export type ScenarioType = 'baseline' | 'solarOnly' | 'withSolar';

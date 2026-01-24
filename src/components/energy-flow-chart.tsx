@@ -11,30 +11,65 @@ import {
     ResponsiveContainer,
     ReferenceLine,
 } from 'recharts';
-import type { MonthlyFinancialSummary } from '@/types';
-import { Info, Battery, Sun } from 'lucide-react';
+import type { MonthlyFinancialSummary, ScenarioType } from '@/types';
+import { Info, Battery, Sun, Zap } from 'lucide-react';
 
 interface EnergyFlowChartProps {
     monthlyData: MonthlyFinancialSummary[];
-    scenario?: 'solarOnly' | 'withSolar';
+    scenario?: ScenarioType;
+}
+
+function getScenarioBadge(scenario: ScenarioType) {
+    switch (scenario) {
+        case 'baseline':
+            return {
+                className: "text-slate-700 bg-slate-100 border-slate-300",
+                icon: <Zap className="h-3 w-3 mr-1" />,
+                label: "No Solar"
+            };
+        case 'solarOnly':
+            return {
+                className: "text-amber-700 bg-amber-50 border-amber-300",
+                icon: <Sun className="h-3 w-3 mr-1" />,
+                label: "Solar Only"
+            };
+        case 'withSolar':
+            return {
+                className: "text-emerald-700 bg-emerald-50 border-emerald-300",
+                icon: <Battery className="h-3 w-3 mr-1" />,
+                label: "Solar + Battery"
+            };
+    }
+}
+
+function getScenarioSubtext(scenario: ScenarioType): string {
+    switch (scenario) {
+        case 'baseline': return 'without solar';
+        case 'solarOnly': return 'with solar only';
+        case 'withSolar': return 'with solar + battery';
+    }
 }
 
 export function EnergyFlowChart({ monthlyData, scenario = 'withSolar' }: EnergyFlowChartProps) {
+    const isBaseline = scenario === 'baseline';
+    
     const chartData = monthlyData.map((month) => ({
         month: formatMonth(month.month),
         fullMonth: month.month,
         consumption: Math.round(month.totalConsumptionKwh),
-        generation: Math.round(month.totalGenerationKwh),
-        selfConsumed: Math.round(Math.min(month.totalGenerationKwh, month.totalConsumptionKwh) - month.gridExportKwh),
+        generation: isBaseline ? 0 : Math.round(month.totalGenerationKwh),
+        selfConsumed: isBaseline ? 0 : Math.round(Math.min(month.totalGenerationKwh, month.totalConsumptionKwh) - month.gridExportKwh),
         gridImport: Math.round(month.gridImportKwh),
-        gridExport: Math.round(month.gridExportKwh),
+        gridExport: isBaseline ? 0 : Math.round(month.gridExportKwh),
     }));
 
     // Calculate totals for summary
     const totalConsumption = monthlyData.reduce((sum, m) => sum + m.totalConsumptionKwh, 0);
-    const totalGeneration = monthlyData.reduce((sum, m) => sum + m.totalGenerationKwh, 0);
+    const totalGeneration = isBaseline ? 0 : monthlyData.reduce((sum, m) => sum + m.totalGenerationKwh, 0);
     const totalGridImport = monthlyData.reduce((sum, m) => sum + m.gridImportKwh, 0);
-    const totalGridExport = monthlyData.reduce((sum, m) => sum + m.gridExportKwh, 0);
+    const totalGridExport = isBaseline ? 0 : monthlyData.reduce((sum, m) => sum + m.gridExportKwh, 0);
+    
+    const badge = getScenarioBadge(scenario);
 
     return (
         <Card>
@@ -43,19 +78,15 @@ export function EnergyFlowChart({ monthlyData, scenario = 'withSolar' }: EnergyF
                     <div>
                         <div className="flex items-center gap-2 mb-1">
                             <CardTitle>Energy Flow Analysis</CardTitle>
-                            <Badge variant="outline" className={scenario === 'withSolar'
-                                ? "text-emerald-700 bg-emerald-50 border-emerald-300"
-                                : "text-amber-700 bg-amber-50 border-amber-300"
-                            }>
-                                {scenario === 'withSolar' ? (
-                                    <><Battery className="h-3 w-3 mr-1" />Solar + Battery</>
-                                ) : (
-                                    <><Sun className="h-3 w-3 mr-1" />Solar Only</>
-                                )}
+                            <Badge variant="outline" className={badge.className}>
+                                {badge.icon}{badge.label}
                             </Badge>
                         </div>
                         <CardDescription>
-                            Your actual usage vs simulated solar generation (based on real weather)
+                            {isBaseline 
+                                ? "Your actual usage with all energy from the grid"
+                                : "Your actual usage vs simulated solar generation (based on real weather)"
+                            }
                         </CardDescription>
                     </div>
                     <div className="flex gap-2">
@@ -63,36 +94,42 @@ export function EnergyFlowChart({ monthlyData, scenario = 'withSolar' }: EnergyF
                             <span className="w-2 h-2 rounded-full bg-slate-500 mr-1.5" />
                             Your Usage
                         </Badge>
-                        <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-300">
-                            <span className="w-2 h-2 rounded-full bg-amber-500 mr-1.5" />
-                            Solar Generation
-                        </Badge>
+                        {!isBaseline && (
+                            <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-300">
+                                <span className="w-2 h-2 rounded-full bg-amber-500 mr-1.5" />
+                                Solar Generation
+                            </Badge>
+                        )}
                     </div>
                 </div>
             </CardHeader>
             <CardContent className="space-y-6">
                 {/* Summary Stats */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
+                <div className={`grid ${isBaseline ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'} gap-4 p-4 bg-muted/50 rounded-lg`}>
                     <div className="text-center">
                         <div className="text-xs text-muted-foreground mb-1">Your Usage</div>
                         <div className="text-lg font-bold text-slate-700 dark:text-slate-300">{Math.round(totalConsumption).toLocaleString()} kWh</div>
                         <div className="text-[10px] text-muted-foreground">actual from Octopus</div>
                     </div>
+                    {!isBaseline && (
+                        <div className="text-center">
+                            <div className="text-xs text-muted-foreground mb-1">Solar Generated</div>
+                            <div className="text-lg font-bold text-amber-600">{Math.round(totalGeneration).toLocaleString()} kWh</div>
+                            <div className="text-[10px] text-muted-foreground">simulated</div>
+                        </div>
+                    )}
                     <div className="text-center">
-                        <div className="text-xs text-muted-foreground mb-1">Solar Generated</div>
-                        <div className="text-lg font-bold text-amber-600">{Math.round(totalGeneration).toLocaleString()} kWh</div>
-                        <div className="text-[10px] text-muted-foreground">simulated</div>
-                    </div>
-                    <div className="text-center">
-                        <div className="text-xs text-muted-foreground mb-1">Would Import</div>
+                        <div className="text-xs text-muted-foreground mb-1">{isBaseline ? 'Grid Import' : 'Would Import'}</div>
                         <div className="text-lg font-bold text-red-600">{Math.round(totalGridImport).toLocaleString()} kWh</div>
-                        <div className="text-[10px] text-muted-foreground">{scenario === 'withSolar' ? 'with solar + battery' : 'with solar only'}</div>
+                        <div className="text-[10px] text-muted-foreground">{getScenarioSubtext(scenario)}</div>
                     </div>
-                    <div className="text-center">
-                        <div className="text-xs text-muted-foreground mb-1">Would Export</div>
-                        <div className="text-lg font-bold text-green-600">{Math.round(totalGridExport).toLocaleString()} kWh</div>
-                        <div className="text-[10px] text-muted-foreground">{scenario === 'withSolar' ? 'with solar + battery' : 'with solar only'}</div>
-                    </div>
+                    {!isBaseline && (
+                        <div className="text-center">
+                            <div className="text-xs text-muted-foreground mb-1">Would Export</div>
+                            <div className="text-lg font-bold text-green-600">{Math.round(totalGridExport).toLocaleString()} kWh</div>
+                            <div className="text-[10px] text-muted-foreground">{getScenarioSubtext(scenario)}</div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Chart */}
