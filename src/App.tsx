@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../@/components/ui/tabs';
-import { Button } from '../@/components/ui/button';
 import { SummaryMetrics } from '@/components/summary-metrics';
 import { CostChart } from '@/components/cost-chart';
 import { ResultsTable } from '@/components/results-table';
@@ -8,8 +7,11 @@ import { EnergyFlowChart } from '@/components/energy-flow-chart';
 import { ScenarioConfigPanel } from '@/components/scenario-config-panel';
 import { ScenarioSelector } from '@/components/scenario-selector';
 import { OctopusConnectDialog } from '@/components/octopus-connect-dialog';
-import { HowItWorksDialog } from '@/components/how-it-works-dialog';
-import { LegalDialogs } from '@/components/legal-dialogs';
+import { AppHeader } from '@/components/app-header';
+import { AppFooter } from '@/components/app-footer';
+import { ConnectionStatusCard } from '@/components/connection-status-card';
+import { StaleResultsWarning } from '@/components/stale-results-warning';
+import { ConnectOverlay } from '@/components/connect-overlay';
 import { useConsumptionData } from '@/hooks/use-consumption-data';
 import { useSolarData } from '@/hooks/use-solar-data';
 import { useSimulation } from '@/hooks/use-simulation';
@@ -18,7 +20,7 @@ import { useActualTariff } from '@/hooks/use-actual-tariff';
 import { useActualTariffEffect } from '@/hooks/use-actual-tariff-effect';
 import { useAppState } from '@/hooks/use-app-state';
 import { useConfigChangeDetection, usePvSystemChangeDetection } from '@/hooks/use-config-change-detection';
-import { AlertCircle, Zap, RefreshCw, Loader2, PlugZap, LogOut, Moon, Sun, BarChart3, Activity, Table, Github, Calendar } from 'lucide-react';
+import { AlertCircle, Loader2, BarChart3, Activity, Table } from 'lucide-react';
 import { Badge } from '../@/components/ui/badge';
 
 function App() {
@@ -188,36 +190,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header with gradient */}
-      <header className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 dark:from-amber-600 dark:via-orange-600 dark:to-amber-700">
-        <div className="container mx-auto px-4 py-5 md:px-8 md:py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              <div className="p-1.5 sm:p-2 bg-white/10 rounded-xl flex-shrink-0">
-                <Zap className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-lg sm:text-2xl md:text-3xl font-bold text-white drop-shadow-sm truncate">Solar + Battery Calculator</h1>
-                <p className="text-amber-50/80 text-xs sm:text-sm hidden sm:block">
-                  Calculate savings using your actual usage data
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <HowItWorksDialog />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={actions.toggleTheme}
-                className="text-white/90 hover:text-white hover:bg-white/10"
-                aria-label="Toggle theme"
-              >
-                {ui.isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader isDark={ui.isDark} onToggleTheme={actions.toggleTheme} />
 
       <div className="container mx-auto p-3 sm:p-4 md:p-8 flex-1 relative">
         {error && (
@@ -235,38 +208,11 @@ function App() {
           <div className="lg:col-span-1 space-y-4">
             {/* Connection Status Card - only shown when connected */}
             {connection.isConnected && (
-              <div className="p-4 rounded-lg border-2 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-700">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-emerald-500/20 rounded-full">
-                      <PlugZap className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Connected to Octopus</p>
-                      <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
-                        <span>{storedData.postcode}</span>
-                        {storedData.dateRange && (
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {new Date(storedData.dateRange.from).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })}
-                            {' - '}
-                            {new Date(storedData.dateRange.to).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDisconnect}
-                    className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
-                  >
-                    <LogOut className="h-3 w-3 mr-1" />
-                    Disconnect
-                  </Button>
-                </div>
-              </div>
+              <ConnectionStatusCard
+                postcode={storedData.postcode}
+                dateRange={storedData.dateRange}
+                onDisconnect={handleDisconnect}
+              />
             )}
 
             {/* Scenario Configuration */}
@@ -303,24 +249,7 @@ function App() {
           <div className="lg:col-span-2 relative min-h-[500px]">
             {/* Stale Results Warning */}
             {(configChangeDetection.hasChanged || pvChangeDetection.needsRegeneration) && connection.isConnected && hasResults && !loading && (
-              <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-900 rounded-lg flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <RefreshCw className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                  <span className="text-sm text-amber-800 dark:text-amber-200">
-                    Settings changed — results may be outdated
-                  </span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRecalculate}
-                  disabled={loading}
-                  className="border-amber-300 text-amber-700 hover:bg-amber-100"
-                >
-                  <RefreshCw className="h-3 w-3 mr-1" />
-                  Update
-                </Button>
-              </div>
+              <StaleResultsWarning onRecalculate={handleRecalculate} loading={loading} />
             )}
 
             {/* Loading State */}
@@ -449,49 +378,13 @@ function App() {
           </div>
         </div>
 
-        {/* Overlay CTA when not connected - positioned over entire content area */}
+        {/* Overlay CTA when not connected */}
         {!connection.isConnected && !loading && (
-          <div className="absolute inset-0 z-10 flex items-start justify-center pt-20 lg:pt-32">
-            <div className="text-center bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm p-8 rounded-2xl shadow-2xl border max-w-md mx-4">
-              <div className="p-3 bg-amber-100 dark:bg-amber-900/50 rounded-full w-fit mx-auto mb-4">
-                <Zap className="h-8 w-8 text-amber-600" />
-              </div>
-              <h2 className="text-xl font-bold mb-2">See Your Personalised Savings</h2>
-              <p className="text-muted-foreground mb-6">
-                Connect your Octopus Energy account to calculate savings based on your actual usage patterns
-              </p>
-              <Button onClick={actions.openConnectDialog} size="lg">
-                <PlugZap className="h-4 w-4" />
-                Connect to Octopus Energy
-              </Button>
-            </div>
-          </div>
+          <ConnectOverlay onConnect={actions.openConnectDialog} />
         )}
       </div>
 
-      {/* Footer */}
-      <footer className="border-t bg-muted/30 py-4 mt-auto">
-        <div className="container mx-auto px-4 md:px-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted-foreground">
-            <p className="text-center sm:text-left">
-              ⚠️ Estimates only — do your own research before making decisions.{' '}
-              <LegalDialogs trigger={<button className="underline hover:text-foreground">More info</button>} />
-            </p>
-            <div className="flex items-center gap-3">
-              <a
-                href="https://github.com/Chronickle/SolarBatteriesAnalysis"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 hover:text-foreground transition-colors"
-              >
-                <Github className="h-4 w-4" />
-                <span className="hidden sm:inline">Source</span>
-              </a>
-              <span className="text-xs">v1.0.0</span>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <AppFooter />
 
       {/* Connection Dialog */}
       <OctopusConnectDialog
