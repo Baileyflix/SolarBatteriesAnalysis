@@ -142,31 +142,31 @@ export function ScenarioConfigPanel({
 
     return (
         <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2 sm:pb-3 p-3 sm:p-6">
                 <div className="flex items-center justify-between">
                     <div>
-                        <CardTitle className="flex items-center gap-2 text-base">
-                            <Settings2 className="h-5 w-5" />
+                        <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+                            <Settings2 className="h-4 w-4 sm:h-5 sm:w-5" />
                             Your Solar Setup
                         </CardTitle>
-                        <CardDescription>
+                        <CardDescription className="text-xs sm:text-sm">
                             Adjust your system to see how it would affect your bills
                         </CardDescription>
                     </div>
                 </div>
             </CardHeader>
-            <CardContent className="grid gap-6">
+            <CardContent className="grid gap-4 sm:gap-6 p-3 sm:p-6 pt-0">
                 {/* PV System */}
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                     <div className="flex items-center gap-2">
                         <Sun className="h-4 w-4 text-amber-500" />
-                        <Label className="text-sm font-medium">Solar PV System</Label>
+                        <Label className="text-xs sm:text-sm font-medium">Solar PV System</Label>
                     </div>
-                    <div className="grid gap-4 pl-6">
-                        <div className="grid gap-2">
-                            <Label htmlFor="pvPreset" className="text-xs text-muted-foreground">Preset</Label>
+                    <div className="grid gap-3 sm:gap-4 pl-4 sm:pl-6">
+                        <div className="grid gap-1.5 sm:gap-2">
+                            <Label htmlFor="pvPreset" className="text-[10px] sm:text-xs text-muted-foreground">Preset</Label>
                             <Select value={config.pvPreset} onValueChange={(v: string) => handlePvPresetChange(v as PVPresetKey)}>
-                                <SelectTrigger id="pvPreset" className="h-9">
+                                <SelectTrigger id="pvPreset" className="h-8 sm:h-9 text-xs sm:text-sm">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -176,9 +176,9 @@ export function ScenarioConfigPanel({
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="grid gap-2">
-                            <div className="flex justify-between items-center text-xs">
-                                <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <div className="grid gap-1.5 sm:gap-2">
+                            <div className="flex justify-between items-center text-[10px] sm:text-xs">
+                                <span className="flex items-center gap-1 sm:gap-1.5 text-muted-foreground">
                                     System Size
                                     <InfoTooltip text="Peak power output of your solar panels (kWp). A typical 400W panel = 0.4 kWp. Small systems (3.5 kWp) have ~9 panels, medium (5 kWp) ~12 panels, large (7 kWp) ~18 panels. Octopus considers up to 4 kWp as standard domestic." />
                                 </span>
@@ -190,27 +190,27 @@ export function ScenarioConfigPanel({
                                 min={1}
                                 max={10}
                                 step={0.5}
-                                className="py-2"
+                                className="py-1.5 sm:py-2"
                             />
-                            <div className="flex justify-between text-xs text-muted-foreground">
-                                <span>1 kWp (~3 panels)</span>
-                                <span>10 kWp (~25 panels)</span>
+                            <div className="flex justify-between text-[10px] sm:text-xs text-muted-foreground">
+                                <span>1 kWp</span>
+                                <span>10 kWp</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 {/* Battery */}
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                     <div className="flex items-center gap-2">
                         <Battery className="h-4 w-4 text-green-500" />
-                        <Label className="text-sm font-medium">Battery Storage</Label>
+                        <Label className="text-xs sm:text-sm font-medium">Battery Storage</Label>
                     </div>
-                    <div className="grid gap-4 pl-6">
-                        <div className="grid gap-2">
-                            <Label htmlFor="batteryPreset" className="text-xs text-muted-foreground">Preset</Label>
+                    <div className="grid gap-3 sm:gap-4 pl-4 sm:pl-6">
+                        <div className="grid gap-1.5 sm:gap-2">
+                            <Label htmlFor="batteryPreset" className="text-[10px] sm:text-xs text-muted-foreground">Preset</Label>
                             <Select value={config.batteryPreset} onValueChange={(v: string) => handleBatteryPresetChange(v as BatteryPresetKey)}>
-                                <SelectTrigger id="batteryPreset" className="h-9">
+                                <SelectTrigger id="batteryPreset" className="h-8 sm:h-9 text-xs sm:text-sm">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -220,9 +220,9 @@ export function ScenarioConfigPanel({
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="grid gap-2">
-                            <div className="flex justify-between items-center text-xs">
-                                <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <div className="grid gap-1.5 sm:gap-2">
+                            <div className="flex justify-between items-center text-[10px] sm:text-xs">
+                                <span className="flex items-center gap-1 sm:gap-1.5 text-muted-foreground">
                                     Capacity
                                     <InfoTooltip text="The amount of energy your battery can store in kilowatt-hours (kWh). A typical UK home uses 8-10 kWh per day. Set to 0 to see results without a battery." />
                                 </span>
@@ -234,10 +234,10 @@ export function ScenarioConfigPanel({
                                 min={0}
                                 max={30}
                                 step={0.5}
-                                className="py-2"
+                                className="py-1.5 sm:py-2"
                             />
-                            <div className="flex justify-between text-xs text-muted-foreground">
-                                <span>0 kWh (no battery)</span>
+                            <div className="flex justify-between text-[10px] sm:text-xs text-muted-foreground">
+                                <span>0 kWh</span>
                                 <span>30 kWh</span>
                             </div>
                         </div>
@@ -245,16 +245,16 @@ export function ScenarioConfigPanel({
                 </div>
 
                 {/* Tariff */}
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                     <div className="flex items-center gap-2">
                         <Zap className="h-4 w-4 text-blue-500" />
-                        <Label className="text-sm font-medium">Energy Tariff</Label>
+                        <Label className="text-xs sm:text-sm font-medium">Energy Tariff</Label>
                     </div>
-                    <div className="grid gap-4 pl-6">
-                        <div className="grid gap-2">
-                            <Label htmlFor="tariffPreset" className="text-xs text-muted-foreground">Tariff</Label>
+                    <div className="grid gap-3 sm:gap-4 pl-4 sm:pl-6">
+                        <div className="grid gap-1.5 sm:gap-2">
+                            <Label htmlFor="tariffPreset" className="text-[10px] sm:text-xs text-muted-foreground">Tariff</Label>
                             <Select value={config.tariffPreset} onValueChange={(v: string) => handleTariffPresetChange(v as TariffPresetKey)}>
-                                <SelectTrigger id="tariffPreset" className="h-9">
+                                <SelectTrigger id="tariffPreset" className="h-8 sm:h-9 text-xs sm:text-sm">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -277,23 +277,23 @@ export function ScenarioConfigPanel({
                             </Select>
                         </div>
                         {/* Tariff Details Card */}
-                        <div className="p-3 bg-muted/50 rounded-lg space-y-2">
-                            <p className="text-xs text-muted-foreground">
+                        <div className="p-2 sm:p-3 bg-muted/50 rounded-lg space-y-1.5 sm:space-y-2">
+                            <p className="text-[10px] sm:text-xs text-muted-foreground">
                                 {UK_TARIFF_PRESETS[config.tariffPreset].description}
                             </p>
-                            <div className="grid grid-cols-2 gap-3 pt-1">
-                                <div className="flex items-center gap-2">
+                            <div className="grid grid-cols-2 gap-2 sm:gap-3 pt-1">
+                                <div className="flex items-center gap-1.5 sm:gap-2">
                                     <div className="w-2 h-2 rounded-full bg-red-400" />
                                     <div>
-                                        <span className="text-xs text-muted-foreground">Import</span>
-                                        <p className="text-sm font-medium">{config.tariff.import.standardRatePence.toFixed(1)}p<span className="text-xs text-muted-foreground">/kWh</span></p>
+                                        <span className="text-[10px] sm:text-xs text-muted-foreground">Import</span>
+                                        <p className="text-xs sm:text-sm font-medium">{config.tariff.import.standardRatePence.toFixed(1)}p<span className="text-[10px] sm:text-xs text-muted-foreground">/kWh</span></p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5 sm:gap-2">
                                     <div className="w-2 h-2 rounded-full bg-green-400" />
                                     <div>
-                                        <span className="text-xs text-muted-foreground">Export</span>
-                                        <p className="text-sm font-medium">{config.tariff.export.ratePence.toFixed(1)}p<span className="text-xs text-muted-foreground">/kWh</span></p>
+                                        <span className="text-[10px] sm:text-xs text-muted-foreground">Export</span>
+                                        <p className="text-xs sm:text-sm font-medium">{config.tariff.export.ratePence.toFixed(1)}p<span className="text-[10px] sm:text-xs text-muted-foreground">/kWh</span></p>
                                     </div>
                                 </div>
                             </div>
@@ -302,14 +302,14 @@ export function ScenarioConfigPanel({
                 </div>
 
                 {/* Financial Inputs */}
-                <div className="space-y-4 pt-2 border-t">
+                <div className="space-y-3 sm:space-y-4 pt-2 border-t">
                     <div className="flex items-center gap-2">
                         <PoundSterling className="h-4 w-4 text-emerald-600" />
-                        <Label className="text-sm font-medium">Financial Details</Label>
+                        <Label className="text-xs sm:text-sm font-medium">Financial Details</Label>
                     </div>
-                    <div className="grid grid-cols-2 gap-4 pl-6">
-                        <div className="grid gap-2">
-                            <Label htmlFor="systemCost" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-4 pl-4 sm:pl-6">
+                        <div className="grid gap-1.5 sm:gap-2">
+                            <Label htmlFor="systemCost" className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
                                 System Cost (£)
                                 <InfoTooltip text="Total installation cost for solar panels and battery. UK average is £8,000-12,000 for panels plus £2,500-5,000 per 5kWh of battery." />
                             </Label>
@@ -320,11 +320,11 @@ export function ScenarioConfigPanel({
                                 value={config.systemCost || ''}
                                 onChange={handleSystemCostChange}
                                 placeholder="10000"
-                                className="h-9"
+                                className="h-8 sm:h-9 text-xs sm:text-sm"
                             />
                         </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="monthlyDD" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <div className="grid gap-1.5 sm:gap-2">
+                            <Label htmlFor="monthlyDD" className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
                                 Monthly DD (£)
                                 <InfoTooltip text="Your current monthly Direct Debit to your energy supplier. Used to calculate potential savings." />
                             </Label>
@@ -335,7 +335,7 @@ export function ScenarioConfigPanel({
                                 value={config.monthlyDirectDebit || ''}
                                 onChange={handleDirectDebitChange}
                                 placeholder="150"
-                                className="h-9"
+                                className="h-8 sm:h-9 text-xs sm:text-sm"
                             />
                         </div>
                     </div>
@@ -347,7 +347,7 @@ export function ScenarioConfigPanel({
                         onClick={onRunSimulation}
                         disabled={isLoading}
                         className="w-full"
-                        size="lg"
+                        size="default"
                     >
                         {isLoading ? (
                             <>

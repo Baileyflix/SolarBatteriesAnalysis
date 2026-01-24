@@ -68,13 +68,13 @@ test.describe('Scenario Configuration Panel', () => {
 
   test('slider labels show correct ranges', async ({ page }) => {
     await test.step('Verify PV slider range', async () => {
-      await expect(page.getByText('1 kWp (~3 panels)')).toBeVisible();
-      await expect(page.getByText('10 kWp (~25 panels)')).toBeVisible();
+      await expect(page.getByText('1 kWp')).toBeVisible();
+      await expect(page.getByText('10 kWp')).toBeVisible();
     });
 
     await test.step('Verify battery slider range', async () => {
-      await expect(page.getByText('0 kWh (no battery)')).toBeVisible();
-      await expect(page.getByText('30 kWh')).toBeVisible();
+      await expect(page.getByText('0 kWh', { exact: true })).toBeVisible();
+      await expect(page.getByText('30 kWh', { exact: true })).toBeVisible();
     });
   });
 

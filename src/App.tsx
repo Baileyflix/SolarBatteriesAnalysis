@@ -225,13 +225,13 @@ function App() {
       <header className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 dark:from-amber-600 dark:via-orange-600 dark:to-amber-700">
         <div className="container mx-auto px-4 py-5 md:px-8 md:py-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
-                <Zap className="h-7 w-7 text-white" />
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="p-1.5 sm:p-2 bg-white/10 rounded-xl flex-shrink-0">
+                <Zap className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
               </div>
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-white drop-shadow-sm">Solar + Battery Calculator</h1>
-                <p className="text-amber-50/80 text-sm hidden md:block">
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-2xl md:text-3xl font-bold text-white drop-shadow-sm truncate">Solar + Battery Calculator</h1>
+                <p className="text-amber-50/80 text-xs sm:text-sm hidden sm:block">
                   Calculate savings using your actual usage data
                 </p>
               </div>
@@ -252,7 +252,7 @@ function App() {
         </div>
       </header>
 
-      <div className="container mx-auto p-4 md:p-8 flex-1 relative">
+      <div className="container mx-auto p-3 sm:p-4 md:p-8 flex-1 relative">
         {error && (
           <div className="mb-6 p-4 border border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-900 rounded-lg flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
@@ -355,24 +355,24 @@ function App() {
             {/* Results Content */}
             {!loading && (
               <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="results" className="flex items-center gap-1.5">
-                    <BarChart3 className="h-4 w-4" />
-                    <span className="hidden sm:inline">Results</span>
+                <TabsList className="grid w-full grid-cols-3 h-auto">
+                  <TabsTrigger value="results" className="flex items-center justify-center gap-1 sm:gap-1.5 px-2 py-1.5 text-xs sm:text-sm">
+                    <BarChart3 className="h-4 w-4 flex-shrink-0" />
+                    <span className="hidden xs:inline">Results</span>
                   </TabsTrigger>
-                  <TabsTrigger value="energy" className="flex items-center gap-1.5">
-                    <Activity className="h-4 w-4" />
-                    <span className="hidden sm:inline">Energy</span>
+                  <TabsTrigger value="energy" className="flex items-center justify-center gap-1 sm:gap-1.5 px-2 py-1.5 text-xs sm:text-sm">
+                    <Activity className="h-4 w-4 flex-shrink-0" />
+                    <span className="hidden xs:inline">Energy</span>
                   </TabsTrigger>
-                  <TabsTrigger value="breakdown" className="flex items-center gap-1.5">
-                    <Table className="h-4 w-4" />
-                    <span className="hidden sm:inline">Breakdown</span>
+                  <TabsTrigger value="breakdown" className="flex items-center justify-center gap-1 sm:gap-1.5 px-2 py-1.5 text-xs sm:text-sm">
+                    <Table className="h-4 w-4 flex-shrink-0" />
+                    <span className="hidden xs:inline">Data</span>
                   </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
                   {/* Data Source Legend */}
-                  <div className="flex flex-wrap gap-3 p-3 bg-muted/50 rounded-lg text-sm">
+                  <div className="flex flex-wrap gap-2 sm:gap-3 p-2 sm:p-3 bg-muted/50 rounded-lg text-xs sm:text-sm">
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary" className="text-slate-700 bg-slate-100">
                         Your Usage
