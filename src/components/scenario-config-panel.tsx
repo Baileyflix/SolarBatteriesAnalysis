@@ -4,16 +4,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Input } from '../../@/components/ui/input';
 import { Slider } from '../../@/components/ui/slider';
 import { Button } from '../../@/components/ui/button';
-import { Sun, Battery, Zap, Settings2, Info, RefreshCw, PoundSterling } from 'lucide-react';
+import { Badge } from '../../@/components/ui/badge';
+import { Sun, Battery, Zap, Settings2, Info, RefreshCw, PoundSterling, Car, Flame, Sparkles, CircleDot, Lock } from 'lucide-react';
 import { UK_BATTERY_PRESETS } from '@/lib/battery-engine';
 import { UK_PV_PRESETS } from '@/lib/solar-generator';
 import { UK_TARIFF_PRESETS } from '@/lib/cost-engine';
-import type { BatteryConfig, TariffConfig, PVSystemConfig } from '@/types';
+import type { BatteryConfig, TariffConfig, PVSystemConfig, ActualTariffInfo } from '@/types';
 import { useState } from 'react';
 
 type PVPresetKey = keyof typeof UK_PV_PRESETS;
 type BatteryPresetKey = keyof typeof UK_BATTERY_PRESETS;
-type TariffPresetKey = keyof typeof UK_TARIFF_PRESETS;
+type TariffPresetKey = keyof typeof UK_TARIFF_PRESETS | 'myTariff';
 
 interface ScenarioConfig {
     pvPreset: PVPresetKey;
@@ -32,6 +33,50 @@ interface ScenarioConfigPanelProps {
     onRunSimulation?: () => void;
     isLoading?: boolean;
     hasChanges?: boolean;
+    actualTariff?: ActualTariffInfo | null;
+    onUseMyTariff?: () => void;
+}
+
+/** Get icon for tariff category */
+function getTariffCategoryIcon(category: string) {
+    switch (category) {
+        case 'ev':
+            return <Car className="h-3 w-3" />;
+        case 'solar':
+            return <Sun className="h-3 w-3" />;
+        case 'heatpump':
+            return <Flame className="h-3 w-3" />;
+        default:
+            return <CircleDot className="h-3 w-3" />;
+    }
+}
+
+/** Get badge variant for tariff category */
+function getTariffCategoryBadge(category: string) {
+    switch (category) {
+        case 'ev':
+            return 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300';
+        case 'solar':
+            return 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300';
+        case 'heatpump':
+            return 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300';
+        default:
+            return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+    }
+}
+
+/** Get eligibility requirement text */
+function getEligibilityText(eligibility: string): string | null {
+    switch (eligibility) {
+        case 'ev':
+            return 'Requires EV charger';
+        case 'heatpump':
+            return 'Requires heat pump';
+        case 'solar':
+            return 'Requires solar panels';
+        default:
+            return null;
+    }
 }
 
 /** Info tooltip component */
@@ -65,6 +110,8 @@ export function ScenarioConfigPanel({
     onRunSimulation,
     isLoading = false,
     hasChanges = false,
+    actualTariff,
+    onUseMyTariff,
 }: ScenarioConfigPanelProps) {
     const handlePvPresetChange = (preset: PVPresetKey): void => {
         const pvConfig = UK_PV_PRESETS[preset];
@@ -115,15 +162,39 @@ export function ScenarioConfigPanel({
     };
 
     const handleTariffPresetChange = (preset: TariffPresetKey): void => {
-        const tariffConfig = UK_TARIFF_PRESETS[preset];
-        onChange({
-            ...config,
-            tariffPreset: preset,
-            tariff: {
-                import: { ...tariffConfig.import },
-                export: { ...tariffConfig.export },
-            },
-        });
+        // Handle 'myTariff' specially - use actual tariff rates
+        if (preset === 'myTariff' && actualTariff) {
+            onChange({
+                ...config,
+                tariffPreset: 'myTariff',
+                tariff: {
+                    import: {
+                        type: actualTariff.isVariable ? 'agile' : 'flat',
+                        standardRatePence: actualTariff.unitRatePence,
+                        standingChargePence: actualTariff.standingChargePence,
+                    },
+                    export: {
+                        name: 'Your Export Tariff',
+                        // Default to SEG rate if no export tariff detected
+                        ratePence: 15.0,
+                    },
+                },
+            });
+            return;
+        }
+        
+        // Standard preset handling
+        if (preset !== 'myTariff') {
+            const tariffConfig = UK_TARIFF_PRESETS[preset];
+            onChange({
+                ...config,
+                tariffPreset: preset,
+                tariff: {
+                    import: { ...tariffConfig.import },
+                    export: { ...tariffConfig.export },
+                },
+            });
+        }
     };
 
     const handleSystemCostChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
@@ -251,35 +322,184 @@ export function ScenarioConfigPanel({
                         <Label className="text-xs sm:text-sm font-medium">Energy Tariff</Label>
                     </div>
                     <div className="grid gap-3 sm:gap-4 pl-4 sm:pl-6">
+                        {/* Show detected tariff if available */}
+                        {actualTariff && (
+                            <div className="p-2 sm:p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg">
+                                <div className="flex items-center justify-between mb-1">
+                                    <div className="flex items-center gap-1.5">
+                                        <Sparkles className="h-3 w-3 text-green-600" />
+                                        <span className="text-[10px] sm:text-xs font-medium text-green-700 dark:text-green-300">Your Current Tariff</span>
+                                    </div>
+                                    {config.tariffPreset === 'myTariff' ? (
+                                        <Badge variant="secondary" className="text-[9px] px-1.5 py-0.5 bg-green-200 text-green-800 dark:bg-green-800 dark:text-green-200">
+                                            ACTIVE
+                                        </Badge>
+                                    ) : onUseMyTariff && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={onUseMyTariff}
+                                            className="h-5 px-2 text-[10px] text-green-700 hover:text-green-800 hover:bg-green-100 dark:text-green-300 dark:hover:bg-green-900"
+                                        >
+                                            Use this
+                                        </Button>
+                                    )}
+                                </div>
+                                <p className="text-xs sm:text-sm font-medium">{actualTariff.displayName}</p>
+                                <div className="flex flex-wrap gap-2 mt-1.5 text-[10px] text-muted-foreground">
+                                    {/* Show TOU rates if available, otherwise show standard rate */}
+                                    {actualTariff.hasTimeOfUseRates && actualTariff.offPeakRatePence && actualTariff.peakRatePence ? (
+                                        <>
+                                            <span className="text-green-600">{actualTariff.offPeakRatePence.toFixed(1)}p off-peak</span>
+                                            <span>•</span>
+                                            <span>{actualTariff.unitRatePence.toFixed(1)}p standard</span>
+                                            <span>•</span>
+                                            <span className="text-red-500">{actualTariff.peakRatePence.toFixed(1)}p peak</span>
+                                        </>
+                                    ) : (
+                                        <span>{actualTariff.unitRatePence.toFixed(1)}p/kWh</span>
+                                    )}
+                                    <span>•</span>
+                                    <span>{actualTariff.standingChargePence.toFixed(1)}p/day</span>
+                                    {actualTariff.isVariable && !actualTariff.hasTimeOfUseRates && (
+                                        <>
+                                            <span>•</span>
+                                            <span className="text-amber-600">Variable</span>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                         <div className="grid gap-1.5 sm:gap-2">
-                            <Label htmlFor="tariffPreset" className="text-[10px] sm:text-xs text-muted-foreground">Tariff</Label>
+                            <Label htmlFor="tariffPreset" className="text-[10px] sm:text-xs text-muted-foreground">
+                                {actualTariff ? 'Compare with tariff' : 'Tariff'}
+                            </Label>
                             <Select value={config.tariffPreset} onValueChange={(v: string) => handleTariffPresetChange(v as TariffPresetKey)}>
                                 <SelectTrigger id="tariffPreset" className="h-8 sm:h-9 text-xs sm:text-sm">
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
-                                    {(Object.keys(UK_TARIFF_PRESETS) as Array<keyof typeof UK_TARIFF_PRESETS>).map((key) => {
-                                        const tariff = UK_TARIFF_PRESETS[key];
-                                        return (
-                                            <SelectItem key={key} value={key}>
+                                <SelectContent className="max-h-[300px]">
+                                    {/* Show My Tariff option if available */}
+                                    {actualTariff && (
+                                        <>
+                                            <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Your Tariff</div>
+                                            <SelectItem value="myTariff">
                                                 <span className="flex items-center gap-2">
-                                                    {tariff.displayLabel}
-                                                    {tariff.recommended && (
-                                                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
-                                                            BEST
-                                                        </span>
-                                                    )}
+                                                    <Sparkles className="h-3 w-3 text-green-600" />
+                                                    {actualTariff.displayName}
+                                                    <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                                                        YOURS
+                                                    </Badge>
                                                 </span>
                                             </SelectItem>
-                                        );
-                                    })}
+                                        </>
+                                    )}
+                                    {/* Group by category */}
+                                    {/* Solar Tariffs */}
+                                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Solar & Export</div>
+                                    {(Object.keys(UK_TARIFF_PRESETS) as Array<keyof typeof UK_TARIFF_PRESETS>)
+                                        .filter(key => UK_TARIFF_PRESETS[key].category === 'solar')
+                                        .map((key) => {
+                                            const tariff = UK_TARIFF_PRESETS[key];
+                                            return (
+                                                <SelectItem key={key} value={key}>
+                                                    <span className="flex items-center gap-2">
+                                                        {getTariffCategoryIcon(tariff.category)}
+                                                        {tariff.displayLabel}
+                                                        {tariff.recommended && (
+                                                            <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+                                                                BEST
+                                                            </Badge>
+                                                        )}
+                                                    </span>
+                                                </SelectItem>
+                                            );
+                                        })}
+                                    {/* EV Tariffs - show eligibility requirement */}
+                                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mt-1 flex items-center gap-1">
+                                        EV & Off-Peak
+                                        <Lock className="h-2.5 w-2.5 text-muted-foreground/60" />
+                                    </div>
+                                    {(Object.keys(UK_TARIFF_PRESETS) as Array<keyof typeof UK_TARIFF_PRESETS>)
+                                        .filter(key => UK_TARIFF_PRESETS[key].category === 'ev')
+                                        .map((key) => {
+                                            const tariff = UK_TARIFF_PRESETS[key];
+                                            const eligibilityText = getEligibilityText(tariff.eligibility);
+                                            return (
+                                                <SelectItem key={key} value={key} className="text-muted-foreground">
+                                                    <span className="flex items-center gap-2">
+                                                        {getTariffCategoryIcon(tariff.category)}
+                                                        <span className="flex flex-col">
+                                                            <span>{tariff.displayLabel}</span>
+                                                            {eligibilityText && (
+                                                                <span className="text-[9px] text-muted-foreground/80">{eligibilityText}</span>
+                                                            )}
+                                                        </span>
+                                                    </span>
+                                                </SelectItem>
+                                            );
+                                        })}
+                                    {/* Heat Pump Tariffs - show eligibility requirement */}
+                                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mt-1 flex items-center gap-1">
+                                        Heat Pump
+                                        <Lock className="h-2.5 w-2.5 text-muted-foreground/60" />
+                                    </div>
+                                    {(Object.keys(UK_TARIFF_PRESETS) as Array<keyof typeof UK_TARIFF_PRESETS>)
+                                        .filter(key => UK_TARIFF_PRESETS[key].category === 'heatpump')
+                                        .map((key) => {
+                                            const tariff = UK_TARIFF_PRESETS[key];
+                                            const eligibilityText = getEligibilityText(tariff.eligibility);
+                                            return (
+                                                <SelectItem key={key} value={key} className="text-muted-foreground">
+                                                    <span className="flex items-center gap-2">
+                                                        {getTariffCategoryIcon(tariff.category)}
+                                                        <span className="flex flex-col">
+                                                            <span>{tariff.displayLabel}</span>
+                                                            {eligibilityText && (
+                                                                <span className="text-[9px] text-muted-foreground/80">{eligibilityText}</span>
+                                                            )}
+                                                        </span>
+                                                    </span>
+                                                </SelectItem>
+                                            );
+                                        })}
+                                    {/* Standard Tariffs */}
+                                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mt-1">Standard & Variable</div>
+                                    {(Object.keys(UK_TARIFF_PRESETS) as Array<keyof typeof UK_TARIFF_PRESETS>)
+                                        .filter(key => UK_TARIFF_PRESETS[key].category === 'standard')
+                                        .map((key) => {
+                                            const tariff = UK_TARIFF_PRESETS[key];
+                                            return (
+                                                <SelectItem key={key} value={key}>
+                                                    <span className="flex items-center gap-2">
+                                                        {getTariffCategoryIcon(tariff.category)}
+                                                        {tariff.displayLabel}
+                                                    </span>
+                                                </SelectItem>
+                                            );
+                                        })}
                                 </SelectContent>
                             </Select>
                         </div>
                         {/* Tariff Details Card */}
                         <div className="p-2 sm:p-3 bg-muted/50 rounded-lg space-y-1.5 sm:space-y-2">
+                            <div className="flex items-center gap-2">
+                                {config.tariffPreset === 'myTariff' ? (
+                                    <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                                        <Sparkles className="h-2.5 w-2.5" />
+                                        YOUR TARIFF
+                                    </span>
+                                ) : (
+                                    <span className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded ${getTariffCategoryBadge(UK_TARIFF_PRESETS[config.tariffPreset].category)}`}>
+                                        {getTariffCategoryIcon(UK_TARIFF_PRESETS[config.tariffPreset].category)}
+                                        {UK_TARIFF_PRESETS[config.tariffPreset].category.toUpperCase()}
+                                    </span>
+                                )}
+                            </div>
                             <p className="text-[10px] sm:text-xs text-muted-foreground">
-                                {UK_TARIFF_PRESETS[config.tariffPreset].description}
+                                {config.tariffPreset === 'myTariff' 
+                                    ? 'Using your actual Octopus Energy tariff rates for accurate calculations.'
+                                    : UK_TARIFF_PRESETS[config.tariffPreset].description}
                             </p>
                             <div className="grid grid-cols-2 gap-2 sm:gap-3 pt-1">
                                 <div className="flex items-center gap-1.5 sm:gap-2">

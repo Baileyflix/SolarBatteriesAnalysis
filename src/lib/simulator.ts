@@ -22,6 +22,8 @@ export interface SimulationConfig {
     tariff: TariffConfig;
     monthlyDirectDebitPounds?: number;
     systemCostPounds?: number;
+    /** Half-hourly rates for TOU tariff calculations */
+    halfHourlyRates?: import('@/types').TariffRatePeriod[];
 }
 
 /**
@@ -36,7 +38,7 @@ export class Simulator {
     constructor(config: SimulationConfig) {
         this.config = config;
         this.batteryEngine = new BatteryEngine(config.battery);
-        this.costEngine = new CostEngine(config.tariff);
+        this.costEngine = new CostEngine(config.tariff, config.halfHourlyRates);
     }
 
     /**

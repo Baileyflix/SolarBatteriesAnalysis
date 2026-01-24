@@ -9,6 +9,7 @@ import type {
     ROICalculation,
     DailyConsumption,
     DailyGeneration,
+    TariffRatePeriod,
 } from '@/types';
 import { Simulator } from '@/lib/simulator';
 import {
@@ -24,11 +25,20 @@ interface UseSimulationParams {
     tariff: TariffConfig;
     monthlyDirectDebitPounds?: number;
     systemCostPounds?: number;
+    /** User's actual tariff for calculating real historical spend */
+    actualTariff?: TariffConfig;
+    /** Half-hourly rates for accurate TOU calculations on actual tariff */
+    actualTariffRates?: TariffRatePeriod[];
 }
 
 interface UseSimulationResult {
+    /** What the user actually spent (using their real tariff) */
+    actualSpend: AnnualFinancialSummary | null;
+    /** What no-solar would cost on the selected tariff */
     baseline: AnnualFinancialSummary | null;
+    /** Solar only (no battery) on selected tariff */
     solarOnly: AnnualFinancialSummary | null;
+    /** Solar + battery on selected tariff */
     withSolar: AnnualFinancialSummary | null;
     comparison: ScenarioComparison | null;
     roi: ROICalculation | null;
@@ -73,6 +83,78 @@ function aggregateGenerationToDaily(records: GenerationTimeSeries['records']): D
 }
 
 /**
+ * Calculate actual costs using half-hourly consumption and half-hourly rates
+ * This gives accurate TOU tariff costs
+ */
+function calculateActualCostsWithTOURates(
+    consumption: ConsumptionTimeSeries,
+    tariff: TariffConfig,
+    rates: TariffRatePeriod[]
+): AnnualFinancialSummary {
+    // Create a map of rates for fast lookup
+    const rateMap = new Map<number, number>();
+    for (const rate of rates) {
+        const from = new Date(rate.validFrom).getTime();
+        const to = new Date(rate.validTo).getTime();
+        // Store rate for each half-hour slot in the period
+        for (let time = from; time < to; time += 30 * 60 * 1000) {
+            rateMap.set(time, rate.ratePence);
+        }
+    }
+
+    // Calculate cost for each consumption interval
+    const monthlyMap = new Map<string, {
+        consumptionKwh: number;
+        importCostPence: number;
+        days: Set<string>;
+    }>();
+
+    for (const record of consumption.records) {
+        const timestamp = new Date(record.intervalStart);
+        const month = record.intervalStart.substring(0, 7); // YYYY-MM
+        const date = record.intervalStart.substring(0, 10); // YYYY-MM-DD
+        
+        // Get rate for this time slot
+        const timeKey = timestamp.getTime();
+        const ratePence = rateMap.get(timeKey) ?? tariff.import.standardRatePence;
+        
+        const costPence = record.consumption * ratePence;
+        
+        const existing = monthlyMap.get(month) ?? { 
+            consumptionKwh: 0, 
+            importCostPence: 0, 
+            days: new Set<string>() 
+        };
+        existing.consumptionKwh += record.consumption;
+        existing.importCostPence += costPence;
+        existing.days.add(date);
+        monthlyMap.set(month, existing);
+    }
+
+    // Convert to monthly summaries
+    const monthlyBreakdown = Array.from(monthlyMap.entries()).map(([month, data]) => {
+        const standingChargePounds = (data.days.size * tariff.import.standingChargePence) / 100;
+        const importCostPounds = data.importCostPence / 100;
+        const netCostPounds = importCostPounds + standingChargePounds;
+
+        return {
+            month,
+            daysInMonth: data.days.size,
+            totalConsumptionKwh: Math.round(data.consumptionKwh * 10) / 10,
+            totalGenerationKwh: 0,
+            gridImportKwh: Math.round(data.consumptionKwh * 10) / 10,
+            gridExportKwh: 0,
+            importCostPounds: Math.round(importCostPounds * 100) / 100,
+            exportRevenuePounds: 0,
+            standingChargePounds: Math.round(standingChargePounds * 100) / 100,
+            netCostPounds: Math.round(netCostPounds * 100) / 100,
+        };
+    }).sort((a, b) => a.month.localeCompare(b.month));
+
+    return createAnnualSummary(monthlyBreakdown);
+}
+
+/**
  * Custom hook for running the full simulation
  * 
  * CALCULATION FLOW (single source of truth):
@@ -85,6 +167,7 @@ function aggregateGenerationToDaily(records: GenerationTimeSeries['records']): D
  * 7. Calculate ROI based on savings and system cost
  */
 export function useSimulation(): UseSimulationResult {
+    const [actualSpend, setActualSpend] = useState<AnnualFinancialSummary | null>(null);
     const [baseline, setBaseline] = useState<AnnualFinancialSummary | null>(null);
     const [solarOnly, setSolarOnly] = useState<AnnualFinancialSummary | null>(null);
     const [withSolar, setWithSolar] = useState<AnnualFinancialSummary | null>(null);
@@ -114,6 +197,26 @@ export function useSimulation(): UseSimulationResult {
             const baselineMonthly = aggregateToMonthly(baselineFlows, params.tariff);
             const baselineResult = createAnnualSummary(baselineMonthly);
 
+            // Calculate ACTUAL SPEND using user's real tariff (if provided)
+            // This is a fixed reference point showing what they actually paid
+            // Use half-hourly rates for TOU tariffs for accurate calculation
+            let actualSpendResult: AnnualFinancialSummary | null = null;
+            if (params.actualTariff) {
+                if (params.actualTariffRates && params.actualTariffRates.length > 0) {
+                    // Use half-hourly rates for accurate TOU calculation
+                    actualSpendResult = calculateActualCostsWithTOURates(
+                        params.consumption,
+                        params.actualTariff,
+                        params.actualTariffRates
+                    );
+                    console.log('[Simulation] Calculated actual spend with TOU rates:', actualSpendResult.totalNetCostPounds);
+                } else {
+                    // Fallback to flat rate calculation
+                    const actualMonthly = aggregateToMonthly(baselineFlows, params.actualTariff);
+                    actualSpendResult = createAnnualSummary(actualMonthly);
+                }
+            }
+
             // Step 3b: Calculate SOLAR ONLY (solar panels, no battery)
             const solarOnlyFlows = simulateDailyEnergyFlows(
                 dailyConsumption,
@@ -129,6 +232,7 @@ export function useSimulation(): UseSimulationResult {
             const solarMonthly = aggregateToMonthly(solarFlows, params.tariff);
             const solarResult = createAnnualSummary(solarMonthly);
 
+            setActualSpend(actualSpendResult);
             setBaseline(baselineResult);
             setSolarOnly(solarOnlyResult);
             setWithSolar(solarResult);
@@ -136,6 +240,7 @@ export function useSimulation(): UseSimulationResult {
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Simulation failed';
             setError(message);
+            setActualSpend(null);
             setBaseline(null);
             setSolarOnly(null);
             setWithSolar(null);
@@ -157,6 +262,7 @@ export function useSimulation(): UseSimulationResult {
     }, [comparison, systemCost]);
 
     const reset = useCallback(() => {
+        setActualSpend(null);
         setBaseline(null);
         setSolarOnly(null);
         setWithSolar(null);
@@ -166,6 +272,7 @@ export function useSimulation(): UseSimulationResult {
     }, []);
 
     return {
+        actualSpend,
         baseline,
         solarOnly,
         withSolar,

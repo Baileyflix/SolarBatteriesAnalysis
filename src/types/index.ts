@@ -40,6 +40,9 @@ export type {
     TariffConfig,
     IntervalCost,
     DailyCost,
+    ActualTariffInfo,
+    ActualCostData,
+    ActualCostSummary,
 } from './tariff';
 
 // Financial summary and ROI types

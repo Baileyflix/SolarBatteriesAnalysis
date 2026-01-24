@@ -13,12 +13,13 @@ import { useConsumptionData } from '@/hooks/use-consumption-data';
 import { useSolarData } from '@/hooks/use-solar-data';
 import { useSimulation } from '@/hooks/use-simulation';
 import { useOctopusSolarEstimate } from '@/hooks/use-octopus-solar-estimate';
+import { useActualTariff } from '@/hooks/use-actual-tariff';
 import { AlertCircle, Zap, RefreshCw, Loader2, PlugZap, LogOut, Moon, Sun, BarChart3, Activity, Table, Github, Calendar } from 'lucide-react';
 import { Badge } from '../@/components/ui/badge';
 import { UK_BATTERY_PRESETS } from '@/lib/battery-engine';
 import { UK_PV_PRESETS } from '@/lib/solar-generator';
 import { UK_TARIFF_PRESETS } from '@/lib/cost-engine';
-import type { PVSystemConfig, ConsumptionTimeSeries, GenerationTimeSeries } from '@/types';
+import type { PVSystemConfig, ConsumptionTimeSeries, GenerationTimeSeries, TariffConfig } from '@/types';
 
 // Default scenario configuration
 function createDefaultConfig(): ScenarioConfig {
@@ -46,6 +47,7 @@ function App() {
   const solarData = useSolarData();
   const simulation = useSimulation();
   const octopusSolarEstimate = useOctopusSolarEstimate();
+  const actualTariff = useActualTariff();
 
   // Connection dialog state
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
@@ -55,7 +57,12 @@ function App() {
   const [storedGeneration, setStoredGeneration] = useState<GenerationTimeSeries | null>(null);
   const [storedPostcode, setStoredPostcode] = useState<string>('');
   const [storedDateRange, setStoredDateRange] = useState<{ from: string; to: string } | null>(null);
+  const [storedApiKey, setStoredApiKey] = useState<string>('');
+  const [storedAccountNumber, setStoredAccountNumber] = useState<string>('');
   const [isConnected, setIsConnected] = useState(false);
+  
+  // Store user's actual tariff as TariffConfig for calculating real historical spend
+  const [storedActualTariffConfig, setStoredActualTariffConfig] = useState<TariffConfig | null>(null);
 
   // Scenario configuration for dynamic adjustments
   const [scenarioConfig, setScenarioConfig] = useState<ScenarioConfig>(createDefaultConfig);
@@ -63,6 +70,10 @@ function App() {
   // Track if we need to regenerate solar data (when PV system changes)
   const [needsRegeneration, setNeedsRegeneration] = useState(false);
   const previousPvSystemRef = useRef<PVSystemConfig | null>(null);
+  
+  // Track if config has changed since last calculation (requires recalculate)
+  const [configChangedSinceLastCalc, setConfigChangedSinceLastCalc] = useState(false);
+  const lastCalcConfigRef = useRef<ScenarioConfig | null>(null);
 
   // Track active tab
   const [activeTab, setActiveTab] = useState('results');
@@ -80,6 +91,42 @@ function App() {
     document.documentElement.classList.toggle('dark', isDark);
   }, [isDark]);
 
+  // Build and store the actual tariff config when it's fetched
+  // Track if we've already re-run simulation with actual tariff
+  const hasRunWithActualTariffRef = useRef(false);
+
+  useEffect(() => {
+    if (actualTariff.importTariff && !actualTariff.loading) {
+      const tariffConfig: TariffConfig = {
+        import: {
+          standardRatePence: actualTariff.importTariff.unitRatePence,
+          standingChargePence: actualTariff.importTariff.standingChargePence,
+        },
+        export: {
+          ratePence: actualTariff.exportTariff?.unitRatePence ?? 15, // Default export rate if no export tariff
+        },
+      };
+      setStoredActualTariffConfig(tariffConfig);
+      
+      // Re-run simulation once when actual tariff becomes available
+      // This ensures actualSpend is calculated after initial connect
+      if (isConnected && storedConsumption && storedGeneration && !hasRunWithActualTariffRef.current) {
+        hasRunWithActualTariffRef.current = true;
+        console.log('[App] Re-running simulation with actual tariff data');
+        simulation.runSimulation({
+          consumption: storedConsumption,
+          generation: storedGeneration,
+          battery: scenarioConfig.battery,
+          tariff: scenarioConfig.tariff,
+          monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit || undefined,
+          systemCostPounds: scenarioConfig.systemCost || undefined,
+          actualTariff: tariffConfig,
+          actualTariffRates: actualTariff.importTariff?.halfHourlyRates ?? undefined,
+        });
+      }
+    }
+  }, [actualTariff.importTariff, actualTariff.exportTariff, actualTariff.loading, isConnected, storedConsumption, storedGeneration]);
+
   // Check if PV system config changed (needs new solar generation)
   useEffect(() => {
     if (previousPvSystemRef.current && storedGeneration) {
@@ -95,52 +142,71 @@ function App() {
     previousPvSystemRef.current = scenarioConfig.pvSystem;
   }, [scenarioConfig.pvSystem, storedGeneration]);
 
-  // Re-run simulation when scenario config changes (if we have data)
+  // Track config changes - mark as needing recalculation when any config changes
   useEffect(() => {
-    if (storedConsumption && storedGeneration && !needsRegeneration) {
+    if (!lastCalcConfigRef.current || !storedConsumption) return;
+    
+    const last = lastCalcConfigRef.current;
+    const current = scenarioConfig;
+    
+    // Check if any config has changed since last calculation
+    const hasChanged = 
+      last.battery.capacityKwh !== current.battery.capacityKwh ||
+      last.tariffPreset !== current.tariffPreset ||
+      last.tariff.import.standardRatePence !== current.tariff.import.standardRatePence ||
+      last.tariff.export.ratePence !== current.tariff.export.ratePence ||
+      last.systemCost !== current.systemCost ||
+      last.monthlyDirectDebit !== current.monthlyDirectDebit ||
+      last.pvSystem.systemSizeKwp !== current.pvSystem.systemSizeKwp;
+      
+    setConfigChangedSinceLastCalc(hasChanged);
+  }, [scenarioConfig, storedConsumption]);
+
+  // Recalculate everything - regenerate solar if needed, then run simulation
+  const handleRecalculate = useCallback(async () => {
+    if (!storedPostcode || !storedDateRange || !storedConsumption) return;
+
+    let generationToUse = storedGeneration;
+    
+    // Regenerate solar data if PV system changed
+    if (needsRegeneration || !storedGeneration) {
+      const newGeneration = await solarData.generateData({
+        postcode: storedPostcode,
+        periodFrom: storedDateRange.from,
+        periodTo: storedDateRange.to,
+        systemConfig: scenarioConfig.pvSystem,
+      });
+
+      if (newGeneration) {
+        setStoredGeneration(newGeneration);
+        setNeedsRegeneration(false);
+        generationToUse = newGeneration;
+      }
+    }
+
+    // Run simulation with current config
+    if (generationToUse) {
       simulation.runSimulation({
         consumption: storedConsumption,
-        generation: storedGeneration,
+        generation: generationToUse,
         battery: scenarioConfig.battery,
         tariff: scenarioConfig.tariff,
         monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit || undefined,
         systemCostPounds: scenarioConfig.systemCost || undefined,
+        actualTariff: storedActualTariffConfig ?? undefined,
+        actualTariffRates: actualTariff.importTariff?.halfHourlyRates ?? undefined,
       });
+      
+      // Store the config we just calculated with
+      lastCalcConfigRef.current = { ...scenarioConfig };
+      setConfigChangedSinceLastCalc(false);
     }
-  }, [scenarioConfig.battery, scenarioConfig.tariff, scenarioConfig.monthlyDirectDebit, scenarioConfig.systemCost, storedConsumption, storedGeneration, needsRegeneration]);
-
-  // Regenerate solar data when PV system changes
-  const handleRegenerateSolar = useCallback(async () => {
-    if (!storedPostcode || !storedDateRange) return;
-
-    const newGeneration = await solarData.generateData({
-      postcode: storedPostcode,
-      periodFrom: storedDateRange.from,
-      periodTo: storedDateRange.to,
-      systemConfig: scenarioConfig.pvSystem,
-    });
-
-    if (newGeneration) {
-      setStoredGeneration(newGeneration);
-      setNeedsRegeneration(false);
-
-      // Re-run simulation with new generation data
-      if (storedConsumption) {
-        simulation.runSimulation({
-          consumption: storedConsumption,
-          generation: newGeneration,
-          battery: scenarioConfig.battery,
-          tariff: scenarioConfig.tariff,
-          monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit || undefined,
-          systemCostPounds: scenarioConfig.systemCost || undefined,
-        });
-      }
-    }
-  }, [storedPostcode, storedDateRange, scenarioConfig, storedConsumption, solarData, simulation]);
+  }, [storedPostcode, storedDateRange, scenarioConfig, storedConsumption, storedGeneration, needsRegeneration, solarData, simulation, storedActualTariffConfig, actualTariff.importTariff?.halfHourlyRates]);
 
   // Handle connection from dialog
   const handleConnect = async (data: {
     apiKey: string;
+    accountNumber: string;
     mpan: string;
     serialNumber: string;
     postcode: string;
@@ -149,6 +215,8 @@ function App() {
     // Store data for later re-simulation
     setStoredPostcode(data.postcode);
     setStoredDateRange(data.dateRange);
+    setStoredApiKey(data.apiKey);
+    setStoredAccountNumber(data.accountNumber);
 
     // Fetch consumption data and solar data in parallel
     // Also fetch Octopus solar estimate (non-blocking)
@@ -171,6 +239,15 @@ function App() {
     // Fetch Octopus's own solar estimate for comparison (non-blocking)
     octopusSolarEstimate.fetchEstimate(data.apiKey, data.postcode);
 
+    // Fetch user's actual tariff from their account (non-blocking)
+    // Include date range so we can fetch half-hourly rates for TOU tariffs
+    if (data.accountNumber) {
+      actualTariff.fetchTariff(data.apiKey, data.accountNumber, {
+        from: new Date(data.dateRange.from),
+        to: new Date(data.dateRange.to),
+      });
+    }
+
     // Store the fetched data
     if (consumptionResult) {
       setStoredConsumption(consumptionResult);
@@ -191,6 +268,9 @@ function App() {
         systemCostPounds: scenarioConfig.systemCost,
       });
       setIsConnected(true);
+      // Store the config we calculated with
+      lastCalcConfigRef.current = { ...scenarioConfig };
+      setConfigChangedSinceLastCalc(false);
     }
   };
 
@@ -201,14 +281,21 @@ function App() {
     setStoredGeneration(null);
     setStoredPostcode('');
     setStoredDateRange(null);
+    setStoredApiKey('');
+    setStoredAccountNumber('');
+    setStoredActualTariffConfig(null);
     setNeedsRegeneration(false);
+    setConfigChangedSinceLastCalc(false);
     previousPvSystemRef.current = null;
+    lastCalcConfigRef.current = null;
+    hasRunWithActualTariffRef.current = false;
     setScenarioConfig(createDefaultConfig());
     simulation.reset();
     octopusSolarEstimate.reset();
+    actualTariff.reset();
     // Clear any localStorage if we ever store anything
     localStorage.removeItem('solar-calculator-preferences');
-  }, [simulation, octopusSolarEstimate]);
+  }, [simulation, octopusSolarEstimate, actualTariff]);
 
   // Handle scenario config changes
   const handleScenarioChange = useCallback((newConfig: ScenarioConfig) => {
@@ -306,38 +393,56 @@ function App() {
             <ScenarioConfigPanel
               config={scenarioConfig}
               onChange={handleScenarioChange}
-              onRunSimulation={isConnected ? handleRegenerateSolar : undefined}
+              onRunSimulation={isConnected ? handleRecalculate : undefined}
               isLoading={solarData.loading || simulation.loading}
-              hasChanges={needsRegeneration}
+              hasChanges={configChangedSinceLastCalc || needsRegeneration}
+              actualTariff={actualTariff.importTariff}
+              onUseMyTariff={actualTariff.importTariff ? () => {
+                const importTariff = actualTariff.importTariff!;
+                const exportTariff = actualTariff.exportTariff;
+                setScenarioConfig(prev => ({
+                  ...prev,
+                  tariffPreset: 'myTariff' as const,
+                  tariff: {
+                    import: {
+                      type: importTariff.isVariable ? 'agile' : 'flat',
+                      standardRatePence: importTariff.unitRatePence,
+                      standingChargePence: importTariff.standingChargePence,
+                    },
+                    export: {
+                      name: exportTariff?.displayName ?? 'Standard Export',
+                      ratePence: exportTariff?.unitRatePence ?? 15.0,
+                    },
+                  },
+                }));
+              } : undefined}
             />
-
-            {/* Regeneration Warning - Only show when solar specifically needs recalc */}
-            {needsRegeneration && isConnected && !solarData.loading && (
-              <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-900 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <RefreshCw className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                      PV system size changed
-                    </p>
-                    <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-                      Solar generation needs to be recalculated.
-                    </p>
-                    <button
-                      onClick={handleRegenerateSolar}
-                      disabled={solarData.loading}
-                      className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300 hover:text-amber-800 dark:hover:text-amber-200 underline"
-                    >
-                      {solarData.loading ? 'Regenerating...' : 'Recalculate Solar Generation'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Right Column - Results */}
           <div className="lg:col-span-2 relative min-h-[500px]">
+            {/* Stale Results Warning */}
+            {(configChangedSinceLastCalc || needsRegeneration) && isConnected && hasResults && !loading && (
+              <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-900 rounded-lg flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <span className="text-sm text-amber-800 dark:text-amber-200">
+                    Settings changed — results may be outdated
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRecalculate}
+                  disabled={loading}
+                  className="border-amber-300 text-amber-700 hover:bg-amber-100"
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Update
+                </Button>
+              </div>
+            )}
+            
             {/* Loading State */}
             {loading && (
               <div className="flex items-center justify-center p-12 bg-muted/30 rounded-lg">
@@ -392,9 +497,10 @@ function App() {
                       <SummaryMetrics
                         comparison={simulation.comparison}
                         roi={simulation.roi}
-                        octopusEstimate={octopusSolarEstimate.estimate}
-                        pvSystemSizeKwp={scenarioConfig.pvSystem.systemSizeKwp}
                         solarOnly={simulation.solarOnly}
+                        usingActualTariff={scenarioConfig.tariffPreset === 'myTariff'}
+                        actualTariff={actualTariff.importTariff}
+                        actualSpend={simulation.actualSpend}
                       />
 
                       {simulation.baseline && simulation.withSolar && (
@@ -402,6 +508,7 @@ function App() {
                           baseline={simulation.baseline.monthlyBreakdown}
                           solarOnly={simulation.solarOnly?.monthlyBreakdown}
                           withSolar={simulation.withSolar.monthlyBreakdown}
+                          actualSpend={simulation.actualSpend?.monthlyBreakdown}
                         />
                       )}
                     </>

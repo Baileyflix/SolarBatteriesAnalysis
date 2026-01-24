@@ -1,6 +1,6 @@
 import axios from 'axios';
 import type { AxiosInstance, AxiosError } from 'axios';
-import type { ConsumptionRecord, ConsumptionTimeSeries, ConsumptionRequest, DailyConsumption } from '@/types';
+import type { ConsumptionRecord, ConsumptionTimeSeries, ConsumptionRequest, DailyConsumption, ActualTariffInfo, ActualCostData, ActualCostSummary, TariffRatePeriod } from '@/types';
 
 /**
  * Response structure from Octopus Energy consumption API
@@ -92,6 +92,63 @@ export interface OctopusSolarEstimate {
 }
 
 /**
+ * GraphQL response for tariff/agreement query
+ */
+interface TariffQueryResponse {
+    data?: {
+        account?: {
+            number: string;
+            electricityAgreements?: Array<{
+                id: number;
+                validFrom: string;
+                validTo?: string;
+                meterPoint?: {
+                    mpan: string;
+                };
+                tariff?: {
+                    productCode?: string;
+                    tariffCode?: string;
+                    displayName?: string;
+                    fullName?: string;
+                    standingCharge?: number;
+                    unitRate?: number;
+                    dayRate?: number;
+                    nightRate?: number;
+                    preVatStandingCharge?: number;
+                    preVatUnitRate?: number;
+                    preVatDayRate?: number;
+                    preVatNightRate?: number;
+                    isExport?: boolean;
+                };
+            }>;
+        };
+    };
+    errors?: Array<{
+        message: string;
+        extensions?: { errorCode?: string };
+    }>;
+}
+
+/**
+ * GraphQL response for smart meter telemetry with costs
+ */
+interface SmartMeterCostResponse {
+    data?: {
+        smartMeterTelemetry?: Array<{
+            readAt: string;
+            consumptionDelta?: number;
+            costDelta?: number;
+            costDeltaWithTax?: number;
+        }>;
+    };
+    errors?: Array<{
+        message: string;
+        extensions?: { errorCode?: string };
+    }>;
+}
+
+
+/**
  * Annual solar estimate summary
  */
 export interface OctopusSolarEstimateSummary {
@@ -151,16 +208,25 @@ export class OctopusEnergyError extends Error {
 export class OctopusEnergyClient {
     private readonly client: AxiosInstance;
     private readonly apiKey: string;
+    private readonly graphqlUrl: string;
 
     constructor(apiKey: string, baseURL?: string) {
         this.apiKey = apiKey;
 
+        // Check if we're in a Vite environment
+        const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV;
+
         // Use proxy in development to avoid CORS issues
         const effectiveBaseURL = baseURL ?? (
-            import.meta.env.DEV
+            isDev
                 ? '/api/octopus'
                 : 'https://api.octopus.energy'
         );
+
+        // Set GraphQL URL based on environment
+        this.graphqlUrl = isDev
+            ? '/api/octopus/v1/graphql/'
+            : 'https://api.octopus.energy/v1/graphql/';
 
         this.client = axios.create({
             baseURL: effectiveBaseURL,
@@ -395,14 +461,9 @@ export class OctopusEnergyClient {
             }
         `;
 
-        // Use proxy in development to avoid CORS issues
-        const graphqlUrl = import.meta.env.DEV
-            ? '/api/octopus/v1/graphql/'
-            : 'https://api.octopus.energy/v1/graphql/';
-
         try {
             const response = await axios.post<ObtainTokenResponse>(
-                graphqlUrl,
+                this.graphqlUrl,
                 {
                     query,
                     variables: { input: { APIKey: this.apiKey } },
@@ -473,14 +534,9 @@ export class OctopusEnergyClient {
             }
         `;
 
-        // Use proxy in development to avoid CORS issues
-        const graphqlUrl = import.meta.env.DEV
-            ? '/api/octopus/v1/graphql/'
-            : 'https://api.octopus.energy/v1/graphql/';
-
         try {
             const response = await axios.post<AccountQueryResponse>(
-                graphqlUrl,
+                this.graphqlUrl,
                 { query },
                 {
                     headers: {
@@ -572,14 +628,9 @@ export class OctopusEnergyClient {
             }
         `;
 
-        // Use proxy in development to avoid CORS issues
-        const graphqlUrl = import.meta.env.DEV
-            ? '/api/octopus/v1/graphql/'
-            : 'https://api.octopus.energy/v1/graphql/';
-
         try {
             const response = await axios.post<SolarGenerationEstimateResponse>(
-                graphqlUrl,
+                this.graphqlUrl,
                 {
                     query,
                     variables: { postcode, fromDate },
@@ -633,6 +684,486 @@ export class OctopusEnergyClient {
             };
         } catch {
             // Don't throw - just return null, this is optional data
+            return null;
+        }
+    }
+
+    /**
+     * Fetch the user's actual tariff information from their account agreements
+     * Returns the current active tariff for import and export (if available)
+     */
+    async fetchActualTariff(accountNumber: string): Promise<{ import?: ActualTariffInfo; export?: ActualTariffInfo } | null> {
+        // First obtain a token
+        let token: string;
+        try {
+            token = await this.obtainToken();
+        } catch {
+            return null;
+        }
+
+        // Query electricityAgreements directly on the account
+        // This is a simpler query that should work reliably
+        const query = `
+            query GetAccountTariffs($accountNumber: String!) {
+                account(accountNumber: $accountNumber) {
+                    number
+                    electricityAgreements {
+                        id
+                        validFrom
+                        validTo
+                        meterPoint {
+                            mpan
+                        }
+                        tariff {
+                            ... on StandardTariff {
+                                productCode
+                                tariffCode
+                                displayName
+                                fullName
+                                standingCharge
+                                unitRate
+                                preVatStandingCharge
+                                preVatUnitRate
+                                isExport
+                            }
+                            ... on DayNightTariff {
+                                productCode
+                                tariffCode
+                                displayName
+                                fullName
+                                standingCharge
+                                dayRate
+                                nightRate
+                                preVatStandingCharge
+                                preVatDayRate
+                                preVatNightRate
+                                isExport
+                            }
+                            ... on HalfHourlyTariff {
+                                productCode
+                                tariffCode
+                                displayName
+                                fullName
+                                standingCharge
+                                preVatStandingCharge
+                                isExport
+                            }
+                        }
+                    }
+                }
+            }
+        `;
+
+        try {
+            const response = await axios.post<TariffQueryResponse>(
+                this.graphqlUrl,
+                {
+                    query,
+                    variables: { accountNumber },
+                },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': token,
+                    },
+                    timeout: 30000,
+                }
+            );
+
+            if (response.data.errors?.length) {
+                console.error('[Octopus] Tariff query errors:', response.data.errors);
+                return null;
+            }
+
+            const account = response.data.data?.account;
+            const agreements = account?.electricityAgreements;
+            if (!agreements?.length) {
+                console.warn('[Octopus] No electricity agreements found');
+                return null;
+            }
+
+            let importTariff: ActualTariffInfo | undefined;
+            let exportTariff: ActualTariffInfo | undefined;
+
+            // Find current active tariffs from agreements
+            const now = new Date();
+            for (const agreement of agreements) {
+                const tariff = agreement.tariff;
+                if (!tariff) continue;
+
+                // Check if agreement is currently active
+                const validFrom = new Date(agreement.validFrom);
+                const validTo = agreement.validTo ? new Date(agreement.validTo) : null;
+                const isActive = validFrom <= now && (!validTo || validTo >= now);
+                
+                if (!isActive) continue;
+
+                // Get the unit rate - for HalfHourly tariffs, we need to fetch from REST API
+                let unitRatePence = tariff.unitRate ?? tariff.dayRate ?? 0;
+                
+                // If no rate is available (HalfHourly tariff), try to fetch from REST API
+                if (unitRatePence === 0 && tariff.productCode && tariff.tariffCode) {
+                    try {
+                        const rates = await this.fetchTariffRates(tariff.productCode, tariff.tariffCode);
+                        if (rates) {
+                            // For time-of-use tariffs, use the standard/average rate
+                            unitRatePence = rates.standardRate ?? rates.averageRate ?? 0;
+                        }
+                    } catch {
+                        // Silently fail - we'll show 0 rate
+                    }
+                }
+
+                const tariffInfo: ActualTariffInfo = {
+                    productCode: tariff.productCode ?? 'Unknown',
+                    tariffCode: tariff.tariffCode ?? 'Unknown',
+                    displayName: tariff.displayName ?? 'Standard Tariff',
+                    fullName: tariff.fullName,
+                    unitRatePence,
+                    standingChargePence: tariff.standingCharge ?? 0,
+                    isVariable: tariff.tariffCode?.toLowerCase().includes('agile') ||
+                               tariff.tariffCode?.toLowerCase().includes('tracker') ||
+                               tariff.tariffCode?.toLowerCase().includes('cosy'),
+                    validFrom: agreement.validFrom,
+                    validTo: agreement.validTo,
+                };
+
+                if (tariff.isExport) {
+                    exportTariff = tariffInfo;
+                } else {
+                    importTariff = tariffInfo;
+                }
+            }
+
+            return {
+                import: importTariff,
+                export: exportTariff,
+            };
+        } catch (error) {
+            console.error('[Octopus] Failed to fetch tariff:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Fetch tariff rates from the REST API
+     * Used for HalfHourly tariffs where rates aren't in GraphQL response
+     */
+    private async fetchTariffRates(productCode: string, tariffCode: string): Promise<{
+        standardRate?: number;
+        averageRate?: number;
+        peakRate?: number;
+        offPeakRate?: number;
+    } | null> {
+        try {
+            // Fetch from product API (no auth required)
+            const productUrl = `https://api.octopus.energy/v1/products/${productCode}/`;
+            const response = await axios.get<{
+                single_register_electricity_tariffs?: Record<string, {
+                    direct_debit_monthly?: {
+                        code: string;
+                        standard_unit_rate_inc_vat?: number;
+                    };
+                }>;
+            }>(productUrl, { timeout: 10000 });
+
+            // Extract the region code from tariff code (e.g., "E-1R-COSY-FIX-12M-25-09-24-K" -> "_K")
+            const regionMatch = tariffCode.match(/-([A-P])$/);
+            if (!regionMatch) return null;
+
+            const regionKey = `_${regionMatch[1]}`;
+            const regionTariff = response.data.single_register_electricity_tariffs?.[regionKey];
+            const standardRate = regionTariff?.direct_debit_monthly?.standard_unit_rate_inc_vat;
+
+            if (standardRate !== undefined) {
+                return { standardRate, averageRate: standardRate };
+            }
+
+            return null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Fetch half-hourly unit rates for a tariff over a date range
+     * This provides actual time-of-use rates for accurate cost calculation
+     */
+    async fetchHalfHourlyRates(
+        productCode: string,
+        tariffCode: string,
+        periodFrom: Date,
+        periodTo: Date
+    ): Promise<TariffRatePeriod[]> {
+        const rates: TariffRatePeriod[] = [];
+        
+        try {
+            // Format dates for API (extend range slightly to ensure coverage)
+            const from = new Date(periodFrom);
+            from.setDate(from.getDate() - 1);
+            const to = new Date(periodTo);
+            to.setDate(to.getDate() + 1);
+
+            const url = `https://api.octopus.energy/v1/products/${productCode}/electricity-tariffs/${tariffCode}/standard-unit-rates/`;
+            
+            let nextUrl: string | null = `${url}?period_from=${from.toISOString()}&period_to=${to.toISOString()}&page_size=1500`;
+
+            while (nextUrl) {
+                const response = await axios.get<{
+                    count: number;
+                    next: string | null;
+                    results: Array<{
+                        value_inc_vat: number;
+                        valid_from: string;
+                        valid_to: string;
+                    }>;
+                }>(nextUrl, { timeout: 15000 });
+
+                for (const rate of response.data.results) {
+                    rates.push({
+                        ratePence: rate.value_inc_vat,
+                        validFrom: rate.valid_from,
+                        validTo: rate.valid_to,
+                    });
+                }
+
+                nextUrl = response.data.next;
+            }
+
+            // Sort by valid_from date descending (most recent first)
+            rates.sort((a, b) => new Date(b.validFrom).getTime() - new Date(a.validFrom).getTime());
+
+            console.log(`[Octopus] Fetched ${rates.length} half-hourly rates for ${tariffCode}`);
+            return rates;
+        } catch (error) {
+            console.error('[Octopus] Failed to fetch half-hourly rates:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Get the rate for a specific timestamp from half-hourly rates
+     */
+    static getRateForTimestamp(rates: TariffRatePeriod[], timestamp: Date): number | null {
+        const time = timestamp.getTime();
+        
+        for (const rate of rates) {
+            const from = new Date(rate.validFrom).getTime();
+            const to = new Date(rate.validTo).getTime();
+            
+            if (time >= from && time < to) {
+                return rate.ratePence;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Analyze half-hourly rates to extract peak/off-peak/standard rates
+     */
+    static analyzeRates(rates: TariffRatePeriod[]): { 
+        offPeak: number; 
+        standard: number; 
+        peak: number;
+        weighted: number;
+    } {
+        if (rates.length === 0) {
+            return { offPeak: 0, standard: 0, peak: 0, weighted: 0 };
+        }
+
+        const uniqueRates = [...new Set(rates.map(r => Math.round(r.ratePence * 100) / 100))].sort((a, b) => a - b);
+        
+        // Calculate weighted average
+        let totalHours = 0;
+        let weightedSum = 0;
+        for (const rate of rates) {
+            const from = new Date(rate.validFrom);
+            const to = new Date(rate.validTo);
+            const hours = (to.getTime() - from.getTime()) / (1000 * 60 * 60);
+            totalHours += hours;
+            weightedSum += rate.ratePence * hours;
+        }
+        const weighted = totalHours > 0 ? weightedSum / totalHours : 0;
+
+        if (uniqueRates.length === 1) {
+            // Flat rate tariff
+            return { 
+                offPeak: uniqueRates[0] ?? 0, 
+                standard: uniqueRates[0] ?? 0, 
+                peak: uniqueRates[0] ?? 0,
+                weighted: uniqueRates[0] ?? 0
+            };
+        } else if (uniqueRates.length === 2) {
+            // Two-rate tariff (day/night)
+            return { 
+                offPeak: uniqueRates[0] ?? 0, 
+                standard: uniqueRates[1] ?? 0, 
+                peak: uniqueRates[1] ?? 0,
+                weighted
+            };
+        } else {
+            // Three or more rates (TOU like Cosy, Flux)
+            return { 
+                offPeak: uniqueRates[0] ?? 0, 
+                standard: uniqueRates[Math.floor(uniqueRates.length / 2)] ?? 0, 
+                peak: uniqueRates[uniqueRates.length - 1] ?? 0,
+                weighted
+            };
+        }
+    }
+
+    /**
+     * Fetch raw tariff data for debugging purposes
+     * Uses __typename to see what tariff type is returned
+     */
+    async fetchActualTariffRaw(accountNumber: string): Promise<unknown> {
+        let token: string;
+        try {
+            token = await this.obtainToken();
+        } catch {
+            return null;
+        }
+
+        // Use __typename to discover the actual tariff type
+        const query = `
+            query GetAccountTariffsRaw($accountNumber: String!) {
+                account(accountNumber: $accountNumber) {
+                    number
+                    electricityAgreements {
+                        id
+                        validFrom
+                        validTo
+                        tariff {
+                            __typename
+                            ... on StandardTariff {
+                                productCode tariffCode displayName fullName
+                                standingCharge unitRate isExport
+                            }
+                            ... on DayNightTariff {
+                                productCode tariffCode displayName fullName
+                                standingCharge dayRate nightRate isExport
+                            }
+                            ... on ThreeRateTariff {
+                                productCode tariffCode displayName fullName
+                                standingCharge dayRate nightRate offPeakRate isExport
+                            }
+                            ... on HalfHourlyTariff {
+                                productCode tariffCode displayName fullName
+                                standingCharge isExport
+                            }
+                            ... on PrepayTariff {
+                                productCode tariffCode displayName fullName
+                                standingCharge unitRate isExport
+                            }
+                        }
+                    }
+                }
+            }
+        `;
+
+        try {
+            const response = await axios.post(
+                this.graphqlUrl,
+                {
+                    query,
+                    variables: { accountNumber },
+                },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': token,
+                    },
+                    timeout: 30000,
+                }
+            );
+
+            return response.data?.data?.account?.electricityAgreements ?? null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Fetch actual costs from smart meter telemetry
+     * This returns the actual costs calculated by Octopus based on the user's tariff
+     */
+    async fetchActualCosts(
+        deviceId: string,
+        startDate: string,
+        endDate: string
+    ): Promise<ActualCostSummary | null> {
+        // First obtain a token
+        let token: string;
+        try {
+            token = await this.obtainToken();
+        } catch {
+            return null;
+        }
+
+        const query = `
+            query GetSmartMeterCosts($deviceId: String!, $start: DateTime!, $end: DateTime!) {
+                smartMeterTelemetry(
+                    deviceId: $deviceId,
+                    start: $start,
+                    end: $end,
+                    grouping: DAY
+                ) {
+                    readAt
+                    consumptionDelta
+                    costDelta
+                    costDeltaWithTax
+                }
+            }
+        `;
+
+        try {
+            const response = await axios.post<SmartMeterCostResponse>(
+                this.graphqlUrl,
+                {
+                    query,
+                    variables: {
+                        deviceId,
+                        start: startDate,
+                        end: endDate,
+                    },
+                },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': token,
+                    },
+                    timeout: 30000,
+                }
+            );
+
+            if (response.data.errors?.length) {
+                return null;
+            }
+
+            const telemetry = response.data.data?.smartMeterTelemetry ?? [];
+            if (telemetry.length === 0) {
+                return null;
+            }
+
+            const dailyCosts: ActualCostData[] = telemetry.map(t => ({
+                date: t.readAt.split('T')[0],
+                consumptionKwh: t.consumptionDelta ?? 0,
+                costPence: t.costDelta ?? 0,
+                costWithVatPence: t.costDeltaWithTax ?? 0,
+            }));
+
+            const totalConsumptionKwh = dailyCosts.reduce((sum, d) => sum + d.consumptionKwh, 0);
+            const totalCostPence = dailyCosts.reduce((sum, d) => sum + d.costWithVatPence, 0);
+
+            return {
+                totalConsumptionKwh,
+                totalCostPounds: totalCostPence / 100,
+                dailyCosts,
+                periodStart: startDate,
+                periodEnd: endDate,
+            };
+        } catch {
             return null;
         }
     }

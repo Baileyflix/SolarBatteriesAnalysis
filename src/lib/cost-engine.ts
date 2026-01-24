@@ -1,26 +1,52 @@
-import type { TariffConfig, IntervalCost, DailyCost } from '@/types';
+import type { TariffConfig, IntervalCost, DailyCost, TariffRatePeriod } from '@/types';
 
 /**
  * Cost calculation engine for grid import/export and tariff calculations
- * Supports flat-rate tariffs (v1)
+ * Supports both flat-rate and time-of-use tariffs
  */
 export class CostEngine {
     private readonly tariffConfig: TariffConfig;
+    private readonly halfHourlyRates: TariffRatePeriod[];
 
-    constructor(tariffConfig: TariffConfig) {
+    constructor(tariffConfig: TariffConfig, halfHourlyRates?: TariffRatePeriod[]) {
         this.tariffConfig = tariffConfig;
+        this.halfHourlyRates = halfHourlyRates ?? [];
+    }
+
+    /**
+     * Get the import rate for a specific timestamp
+     * Uses half-hourly rates if available, otherwise falls back to flat rate
+     */
+    private getImportRateForTimestamp(timestamp: Date): number {
+        if (this.halfHourlyRates.length > 0) {
+            const time = timestamp.getTime();
+            
+            for (const rate of this.halfHourlyRates) {
+                const from = new Date(rate.validFrom).getTime();
+                const to = new Date(rate.validTo).getTime();
+                
+                if (time >= from && time < to) {
+                    return rate.ratePence;
+                }
+            }
+        }
+        
+        // Fallback to flat rate
+        return this.tariffConfig.import.standardRatePence;
     }
 
     /**
      * Calculate costs for a single half-hourly interval
+     * Now supports time-of-use rates
      */
     calculateIntervalCost(
         intervalStart: string,
         gridImportKwh: number,
         gridExportKwh: number
     ): IntervalCost {
-        // For v1, we only support flat-rate tariffs
-        const importRatePence = this.tariffConfig.import.standardRatePence;
+        // Get the rate for this specific time period
+        const timestamp = new Date(intervalStart);
+        const importRatePence = this.getImportRateForTimestamp(timestamp);
         const exportRatePence = this.tariffConfig.export.ratePence;
 
         const importCostPence = gridImportKwh * importRatePence;
@@ -133,6 +159,12 @@ export class CostEngine {
  * 1. Octopus Flux: Off-peak import (2-5am) at ~10p, export at peak (4-7pm) at 25p
  * 2. Intelligent Go: Off-peak import (11:30pm-5:30am) at ~7p, standard during day
  * 3. Agile: Variable rates, can be negative or very high - charge when cheap, export when expensive
+ * 
+ * Eligibility Requirements:
+ * - EV tariffs: Require registered EV charger
+ * - Heat Pump: Require registered heat pump
+ * - Solar/Export: Available to all with solar
+ * - Standard: Available to all
  */
 export const UK_TARIFF_PRESETS = {
     // BEST FOR SOLAR+BATTERY - Octopus Flux with time-of-use
@@ -142,6 +174,8 @@ export const UK_TARIFF_PRESETS = {
     octopusFlux: {
         displayLabel: 'Octopus Flux',
         recommended: true,
+        category: 'solar' as const,
+        eligibility: 'solar' as const,
         import: {
             type: 'flat' as const,
             standardRatePence: 24.50, // Day rate
@@ -161,6 +195,8 @@ export const UK_TARIFF_PRESETS = {
     intelligentGo: {
         displayLabel: 'Intelligent Go',
         recommended: false,
+        category: 'ev' as const,
+        eligibility: 'ev' as const,
         import: {
             type: 'go' as const,
             standardRatePence: 24.50,
@@ -171,12 +207,67 @@ export const UK_TARIFF_PRESETS = {
             name: 'Octopus Outgoing Fixed',
             ratePence: 15.0,
         },
-        description: 'Great for EV owners. 7p overnight (23:30-05:30), 24p day rate.',
+        description: 'Requires EV charger. 7p overnight (23:30-05:30), 24p day rate.',
+    },
+    // Octopus Go (non-EV version) - simple time-of-use
+    octopusGo: {
+        displayLabel: 'Octopus Go',
+        recommended: false,
+        category: 'ev' as const,
+        eligibility: 'ev' as const,
+        import: {
+            type: 'go' as const,
+            standardRatePence: 24.95,
+            standingChargePence: 50.29,
+            offPeakRatePence: 9.00, // 00:30-04:30
+        },
+        export: {
+            name: 'Octopus Outgoing Fixed',
+            ratePence: 15.0,
+        },
+        description: 'Requires EV charger. 9p overnight (00:30-04:30), 25p day rate.',
+    },
+    // Octopus Cosy - for heat pumps (3 off-peak periods)
+    octopusCosy: {
+        displayLabel: 'Octopus Cosy',
+        recommended: false,
+        category: 'heatpump' as const,
+        eligibility: 'heatpump' as const,
+        import: {
+            type: 'flat' as const,
+            standardRatePence: 26.70,
+            standingChargePence: 47.89,
+            offPeakRatePence: 10.00, // 04:00-07:00, 13:00-16:00, 22:00-00:00
+        },
+        export: {
+            name: 'Octopus Outgoing Fixed',
+            ratePence: 15.0,
+        },
+        description: 'Requires heat pump. 10p off-peak (3 windows), 27p standard.',
+    },
+    // Octopus Tracker - follows wholesale prices
+    octopusTracker: {
+        displayLabel: 'Octopus Tracker',
+        recommended: false,
+        category: 'standard' as const,
+        eligibility: 'all' as const,
+        import: {
+            type: 'tracker' as const,
+            standardRatePence: 20.50, // Varies daily
+            standingChargePence: 47.89,
+        },
+        export: {
+            name: 'Octopus Outgoing Fixed',
+            ratePence: 15.0,
+        },
+        description: 'Follows wholesale prices daily. Currently ~20.5p average.',
     },
     // Agile import with Agile Outgoing export
     octopusAgile: {
         displayLabel: 'Octopus Agile',
         recommended: false,
+        category: 'standard' as const,
+        eligibility: 'all' as const,
         import: {
             type: 'agile' as const,
             standardRatePence: 20.0, // Average, varies 5p-50p+
@@ -192,6 +283,8 @@ export const UK_TARIFF_PRESETS = {
     octopusFlexible: {
         displayLabel: 'Octopus Flexible',
         recommended: false,
+        category: 'standard' as const,
+        eligibility: 'all' as const,
         import: {
             type: 'flat' as const,
             standardRatePence: 24.50,
@@ -203,10 +296,82 @@ export const UK_TARIFF_PRESETS = {
         },
         description: 'Simple flat rate. 24.5p import, 15p export.',
     },
-    // Standard SEG (low export) - baseline comparison
+    // EDF GoElectric (EV tariff)
+    edfGoElectric: {
+        displayLabel: 'EDF GoElectric',
+        recommended: false,
+        category: 'ev' as const,
+        eligibility: 'ev' as const,
+        import: {
+            type: 'go' as const,
+            standardRatePence: 27.51,
+            standingChargePence: 45.75,
+            offPeakRatePence: 7.50, // 00:00-07:00
+        },
+        export: {
+            name: 'Smart Export Guarantee',
+            ratePence: 4.5,
+        },
+        description: 'Requires EV charger. 7.5p overnight (00:00-07:00), 27.5p day.',
+    },
+    // British Gas Electric Drivers
+    bgElectricDrivers: {
+        displayLabel: 'BG Electric Drivers',
+        recommended: false,
+        category: 'ev' as const,
+        eligibility: 'ev' as const,
+        import: {
+            type: 'go' as const,
+            standardRatePence: 28.70,
+            standingChargePence: 50.00,
+            offPeakRatePence: 8.00, // 00:00-05:00
+        },
+        export: {
+            name: 'Smart Export Guarantee',
+            ratePence: 3.0,
+        },
+        description: 'Requires EV charger. 8p overnight (00:00-05:00), 28.7p day.',
+    },
+    // OVO Drive Anytime
+    ovoDriveAnytime: {
+        displayLabel: 'OVO Drive Anytime',
+        recommended: false,
+        category: 'ev' as const,
+        eligibility: 'ev' as const,
+        import: {
+            type: 'flat' as const,
+            standardRatePence: 25.00,
+            standingChargePence: 49.00,
+        },
+        export: {
+            name: 'Smart Export Guarantee',
+            ratePence: 4.0,
+        },
+        description: 'Requires EV charger. 25p flat rate.',
+    },
+    // Ofgem Price Cap (baseline comparison)
+    ofgemPriceCap: {
+        displayLabel: 'Ofgem Price Cap',
+        recommended: false,
+        category: 'standard' as const,
+        eligibility: 'all' as const,
+        import: {
+            type: 'flat' as const,
+            standardRatePence: 24.50, // Q1 2025 cap
+            standingChargePence: 60.10, // Daily standing charge
+        },
+        export: {
+            name: 'Smart Export Guarantee (min)',
+            ratePence: 4.0, // Minimum SEG rate
+        },
+        description: 'Ofgem price cap rate. Use as baseline comparison.',
+    },
+    // Standard SEG (low export) - worst case comparison
     standardSEG: {
         displayLabel: 'Standard + SEG',
         recommended: false,
+        category: 'standard' as const,
+        eligibility: 'all' as const,
         import: {
             type: 'flat' as const,
             standardRatePence: 24.50,
@@ -219,3 +384,50 @@ export const UK_TARIFF_PRESETS = {
         description: 'Basic export. 24.5p import, only 4.1p export.',
     },
 } as const;
+
+/**
+ * Tariff categories for filtering
+ */
+export type TariffCategory = 'solar' | 'ev' | 'heatpump' | 'standard';
+
+/**
+ * Tariff eligibility types
+ */
+export type TariffEligibility = 'all' | 'solar' | 'ev' | 'heatpump';
+
+/**
+ * Get tariff presets filtered by category
+ */
+export function getTariffsByCategory(category: TariffCategory | 'all' = 'all') {
+    if (category === 'all') {
+        return UK_TARIFF_PRESETS;
+    }
+    return Object.fromEntries(
+        Object.entries(UK_TARIFF_PRESETS).filter(([, tariff]) => tariff.category === category)
+    );
+}
+
+/**
+ * Get tariff presets filtered by eligibility
+ * Returns tariffs available to users with the given eligibility
+ */
+export function getTariffsByEligibility(eligibility: TariffEligibility | 'all' = 'all') {
+    if (eligibility === 'all') {
+        return UK_TARIFF_PRESETS;
+    }
+    
+    // Users with solar can access solar and standard tariffs
+    // Users with EV can access EV, solar (if they have solar), and standard tariffs
+    // Users with heat pump can access heat pump, solar (if they have solar), and standard tariffs
+    return Object.fromEntries(
+        Object.entries(UK_TARIFF_PRESETS).filter(([, tariff]) => {
+            // Always include 'all' eligibility tariffs
+            if (tariff.eligibility === 'all') return true;
+            // Include if user has specific equipment
+            if (tariff.eligibility === eligibility) return true;
+            // Solar tariffs available to those with solar
+            if (tariff.eligibility === 'solar' && eligibility === 'solar') return true;
+            return false;
+        })
+    );
+}

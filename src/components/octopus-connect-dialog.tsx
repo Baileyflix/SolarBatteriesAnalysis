@@ -18,6 +18,7 @@ interface OctopusConnectDialogProps {
     onOpenChange: (open: boolean) => void;
     onConnect: (data: {
         apiKey: string;
+        accountNumber: string;
         mpan: string;
         serialNumber: string;
         postcode: string;
@@ -31,7 +32,7 @@ export function OctopusConnectDialog({ open, onOpenChange, onConnect }: OctopusC
     const [postcode, setPostcode] = useState('');
     const [step, setStep] = useState<'api-key' | 'select-meter'>('api-key');
 
-    const { meters, loading, error, discoverAccount, reset } = useAccountDiscovery();
+    const { meters, accounts, loading, error, discoverAccount, reset } = useAccountDiscovery();
 
     // Calculate date range (last 12 months)
     const getDateRange = () => {
@@ -74,8 +75,11 @@ export function OctopusConnectDialog({ open, onOpenChange, onConnect }: OctopusC
     const handleMeterSelect = () => {
         if (!selectedMeter || !postcode) return;
         const [mpan, serialNumber] = selectedMeter.split('|');
+        // Get the first account number (most users have one account)
+        const accountNumber = accounts?.[0]?.number ?? '';
         onConnect({
             apiKey: apiKey.trim(),
+            accountNumber,
             mpan,
             serialNumber,
             postcode: postcode.trim().toUpperCase(),
