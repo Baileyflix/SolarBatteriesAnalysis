@@ -99,16 +99,6 @@ src/
 └── types/            # TypeScript type definitions
 ```
 
-## Tariff Presets
-
-| Tariff | Import Rate | Export Rate | Best For |
-|--------|-------------|-------------|----------|
-| Octopus Flux ⭐ | 24.5p (10p overnight) | 25p | Solar + battery |
-| Intelligent Go | 24.5p (7p overnight) | 15p | EV owners |
-| Octopus Agile | ~20p (variable) | ~15p | Flexible usage |
-| Octopus Flexible | 24.5p (flat) | 15p | Simplicity |
-| Standard + SEG | 24.5p | 4.1p | No smart export |
-
 ## Privacy & Security
 
 - Your Octopus API key is only used client-side and is never sent to any server
