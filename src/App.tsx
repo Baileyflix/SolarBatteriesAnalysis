@@ -1,11 +1,11 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../@/components/ui/tabs';
 import { Button } from '../@/components/ui/button';
 import { SummaryMetrics } from '@/components/summary-metrics';
 import { CostChart } from '@/components/cost-chart';
 import { ResultsTable } from '@/components/results-table';
 import { EnergyFlowChart } from '@/components/energy-flow-chart';
-import { ScenarioConfigPanel, type ScenarioConfig } from '@/components/scenario-config-panel';
+import { ScenarioConfigPanel } from '@/components/scenario-config-panel';
 import { OctopusConnectDialog } from '@/components/octopus-connect-dialog';
 import { HowItWorksDialog } from '@/components/how-it-works-dialog';
 import { LegalDialogs } from '@/components/legal-dialogs';
@@ -14,35 +14,23 @@ import { useSolarData } from '@/hooks/use-solar-data';
 import { useSimulation } from '@/hooks/use-simulation';
 import { useOctopusSolarEstimate } from '@/hooks/use-octopus-solar-estimate';
 import { useActualTariff } from '@/hooks/use-actual-tariff';
+import { useAppState } from '@/hooks/use-app-state';
 import { useConfigChangeDetection, usePvSystemChangeDetection } from '@/hooks/use-config-change-detection';
 import { AlertCircle, Zap, RefreshCw, Loader2, PlugZap, LogOut, Moon, Sun, BarChart3, Activity, Table, Github, Calendar } from 'lucide-react';
 import { Badge } from '../@/components/ui/badge';
-import { UK_BATTERY_PRESETS } from '@/lib/battery-engine';
-import { UK_PV_PRESETS } from '@/lib/solar-generator';
-import { UK_TARIFF_PRESETS } from '@/lib/cost-engine';
-import type { ConsumptionTimeSeries, GenerationTimeSeries, TariffConfig } from '@/types';
-
-// Default scenario configuration
-function createDefaultConfig(): ScenarioConfig {
-  return {
-    pvPreset: 'medium',
-    pvSystem: {
-      systemSizeKwp: UK_PV_PRESETS.medium.systemSizeKwp,
-      performanceRatio: UK_PV_PRESETS.medium.performanceRatio,
-    },
-    batteryPreset: 'medium',
-    battery: { ...UK_BATTERY_PRESETS.medium },
-    tariffPreset: 'octopusFlux',
-    tariff: {
-      import: { ...UK_TARIFF_PRESETS.octopusFlux.import },
-      export: { ...UK_TARIFF_PRESETS.octopusFlux.export },
-    },
-    systemCost: 10000,
-    monthlyDirectDebit: 150,
-  };
-}
+import type { TariffConfig } from '@/types';
 
 function App() {
+  // Centralized app state management
+  const appState = useAppState();
+  const {
+    connection,
+    storedData,
+    config: scenarioConfig,
+    ui,
+    actions,
+  } = appState;
+
   // Data fetching hooks
   const consumptionData = useConsumptionData();
   const solarData = useSolarData();
@@ -50,81 +38,48 @@ function App() {
   const octopusSolarEstimate = useOctopusSolarEstimate();
   const actualTariff = useActualTariff();
 
-  // Connection dialog state
-  const [connectDialogOpen, setConnectDialogOpen] = useState(false);
-
-  // Store fetched data for re-simulation
-  const [storedConsumption, setStoredConsumption] = useState<ConsumptionTimeSeries | null>(null);
-  const [storedGeneration, setStoredGeneration] = useState<GenerationTimeSeries | null>(null);
-  const [storedPostcode, setStoredPostcode] = useState<string>('');
-  const [storedDateRange, setStoredDateRange] = useState<{ from: string; to: string } | null>(null);
-  const [storedApiKey, setStoredApiKey] = useState<string>('');
-  const [storedAccountNumber, setStoredAccountNumber] = useState<string>('');
-  const [isConnected, setIsConnected] = useState(false);
-
-  // Store user's actual tariff as TariffConfig for calculating real historical spend
-  const [storedActualTariffConfig, setStoredActualTariffConfig] = useState<TariffConfig | null>(null);
-
-  // Scenario configuration for dynamic adjustments
-  const [scenarioConfig, setScenarioConfig] = useState<ScenarioConfig>(createDefaultConfig);
-
   // Config change detection hooks (extracted from App.tsx for cleaner code)
-  const configChangeDetection = useConfigChangeDetection(scenarioConfig, isConnected);
-  const pvChangeDetection = usePvSystemChangeDetection(scenarioConfig.pvSystem, storedGeneration !== null);
-
-  // Track active tab
-  const [activeTab, setActiveTab] = useState('results');
-
-  // Scenario selector for Energy/Data tabs
-  const [selectedScenario, setSelectedScenario] = useState<'solarOnly' | 'withSolar'>('withSolar');
-
-  // Theme toggle
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return document.documentElement.classList.contains('dark') ||
-        window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
-    return false;
-  });
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', isDark);
-  }, [isDark]);
+  const configChangeDetection = useConfigChangeDetection(scenarioConfig, connection.isConnected);
+  const pvChangeDetection = usePvSystemChangeDetection(scenarioConfig.pvSystem, storedData.hasStoredGeneration);
 
   // Build and store the actual tariff config when it's fetched
   // Track if we've already re-run simulation with actual tariff
   const hasRunWithActualTariffRef = useRef(false);
 
-  useEffect(() => {
-    if (actualTariff.importTariff && !actualTariff.loading) {
-      const tariffConfig: TariffConfig = {
-        import: {
-          standardRatePence: actualTariff.importTariff.unitRatePence,
-          standingChargePence: actualTariff.importTariff.standingChargePence,
-        },
-        export: {
-          ratePence: actualTariff.exportTariff?.unitRatePence ?? 15, // Default export rate if no export tariff
-        },
-      };
-      setStoredActualTariffConfig(tariffConfig);
-
-      // Re-run simulation once when actual tariff becomes available
-      // This ensures actualSpend is calculated after initial connect
-      if (isConnected && storedConsumption && storedGeneration && !hasRunWithActualTariffRef.current) {
-        hasRunWithActualTariffRef.current = true;
-        simulation.runSimulation({
-          consumption: storedConsumption,
-          generation: storedGeneration,
-          battery: scenarioConfig.battery,
-          tariff: scenarioConfig.tariff,
-          monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit || undefined,
-          systemCostPounds: scenarioConfig.systemCost || undefined,
-          actualTariff: tariffConfig,
-          actualTariffRates: actualTariff.importTariff?.halfHourlyRates ?? undefined,
-        });
-      }
+  // Update stored actual tariff config when fetched
+  // Re-run simulation once when actual tariff becomes available
+  if (actualTariff.importTariff && !actualTariff.loading) {
+    const tariffConfig: TariffConfig = {
+      import: {
+        standardRatePence: actualTariff.importTariff.unitRatePence,
+        standingChargePence: actualTariff.importTariff.standingChargePence,
+      },
+      export: {
+        ratePence: actualTariff.exportTariff?.unitRatePence ?? 15, // Default export rate if no export tariff
+      },
+    };
+    
+    // Store tariff config if not already stored
+    if (!storedData.actualTariffConfig) {
+      actions.storeActualTariffConfig(tariffConfig);
     }
-  }, [actualTariff.importTariff, actualTariff.exportTariff, actualTariff.loading, isConnected, storedConsumption, storedGeneration]);
+
+    // Re-run simulation once when actual tariff becomes available
+    // This ensures actualSpend is calculated after initial connect
+    if (connection.isConnected && storedData.consumption && storedData.generation && !hasRunWithActualTariffRef.current) {
+      hasRunWithActualTariffRef.current = true;
+      simulation.runSimulation({
+        consumption: storedData.consumption,
+        generation: storedData.generation,
+        battery: scenarioConfig.battery,
+        tariff: scenarioConfig.tariff,
+        monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit || undefined,
+        systemCostPounds: scenarioConfig.systemCost || undefined,
+        actualTariff: tariffConfig,
+        actualTariffRates: actualTariff.importTariff?.halfHourlyRates ?? undefined,
+      });
+    }
+  }
 
   // PV system and config change detection is now handled by hooks:
   // - configChangeDetection.hasChanged: true when any config field changed
@@ -132,21 +87,21 @@ function App() {
 
   // Recalculate everything - regenerate solar if needed, then run simulation
   const handleRecalculate = useCallback(async () => {
-    if (!storedPostcode || !storedDateRange || !storedConsumption) return;
+    if (!storedData.postcode || !storedData.dateRange || !storedData.consumption) return;
 
-    let generationToUse = storedGeneration;
+    let generationToUse = storedData.generation;
 
     // Regenerate solar data if PV system changed
-    if (pvChangeDetection.needsRegeneration || !storedGeneration) {
+    if (pvChangeDetection.needsRegeneration || !storedData.generation) {
       const newGeneration = await solarData.generateData({
-        postcode: storedPostcode,
-        periodFrom: storedDateRange.from,
-        periodTo: storedDateRange.to,
+        postcode: storedData.postcode,
+        periodFrom: storedData.dateRange.from,
+        periodTo: storedData.dateRange.to,
         systemConfig: scenarioConfig.pvSystem,
       });
 
       if (newGeneration) {
-        setStoredGeneration(newGeneration);
+        actions.storeGeneration(newGeneration);
         pvChangeDetection.markAsRegenerated();
         generationToUse = newGeneration;
       }
@@ -155,20 +110,20 @@ function App() {
     // Run simulation with current config
     if (generationToUse) {
       simulation.runSimulation({
-        consumption: storedConsumption,
+        consumption: storedData.consumption,
         generation: generationToUse,
         battery: scenarioConfig.battery,
         tariff: scenarioConfig.tariff,
         monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit || undefined,
         systemCostPounds: scenarioConfig.systemCost || undefined,
-        actualTariff: storedActualTariffConfig ?? undefined,
+        actualTariff: storedData.actualTariffConfig ?? undefined,
         actualTariffRates: actualTariff.importTariff?.halfHourlyRates ?? undefined,
       });
 
       // Mark config as calculated (clears the hasChanged flag)
       configChangeDetection.markAsCalculated();
     }
-  }, [storedPostcode, storedDateRange, scenarioConfig, storedConsumption, storedGeneration, pvChangeDetection, solarData, simulation, storedActualTariffConfig, actualTariff.importTariff?.halfHourlyRates, configChangeDetection]);
+  }, [storedData.postcode, storedData.dateRange, scenarioConfig, storedData.consumption, storedData.generation, pvChangeDetection, solarData, simulation, storedData.actualTariffConfig, actualTariff.importTariff?.halfHourlyRates, configChangeDetection, actions]);
 
   // Handle connection from dialog
   const handleConnect = async (data: {
@@ -180,10 +135,12 @@ function App() {
     dateRange: { from: string; to: string };
   }) => {
     // Store data for later re-simulation
-    setStoredPostcode(data.postcode);
-    setStoredDateRange(data.dateRange);
-    setStoredApiKey(data.apiKey);
-    setStoredAccountNumber(data.accountNumber);
+    actions.storeConnectionData({
+      apiKey: data.apiKey,
+      accountNumber: data.accountNumber,
+      postcode: data.postcode,
+      dateRange: data.dateRange,
+    });
 
     // Fetch consumption data and solar data in parallel
     // Also fetch Octopus solar estimate (non-blocking)
@@ -217,10 +174,10 @@ function App() {
 
     // Store the fetched data
     if (consumptionResult) {
-      setStoredConsumption(consumptionResult);
+      actions.storeConsumption(consumptionResult);
     }
     if (solarResult) {
-      setStoredGeneration(solarResult);
+      actions.storeGeneration(solarResult);
     }
 
     // Run simulation if both datasets loaded successfully
@@ -233,7 +190,7 @@ function App() {
         monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit,
         systemCostPounds: scenarioConfig.systemCost,
       });
-      setIsConnected(true);
+      actions.setConnected(true);
       // Mark config as calculated
       configChangeDetection.markAsCalculated();
     }
@@ -241,30 +198,17 @@ function App() {
 
   // Handle disconnect - clear all data
   const handleDisconnect = useCallback(() => {
-    setIsConnected(false);
-    setStoredConsumption(null);
-    setStoredGeneration(null);
-    setStoredPostcode('');
-    setStoredDateRange(null);
-    setStoredApiKey('');
-    setStoredAccountNumber('');
-    setStoredActualTariffConfig(null);
+    // Use centralized disconnect action
+    actions.disconnect();
     // Reset config change detection hooks
     configChangeDetection.reset();
     pvChangeDetection.reset();
     hasRunWithActualTariffRef.current = false;
-    setScenarioConfig(createDefaultConfig());
+    // Reset data fetching hooks
     simulation.reset();
     octopusSolarEstimate.reset();
     actualTariff.reset();
-    // Clear any localStorage if we ever store anything
-    localStorage.removeItem('solar-calculator-preferences');
-  }, [simulation, octopusSolarEstimate, actualTariff, configChangeDetection, pvChangeDetection]);
-
-  // Handle scenario config changes
-  const handleScenarioChange = useCallback((newConfig: ScenarioConfig) => {
-    setScenarioConfig(newConfig);
-  }, []);
+  }, [actions, simulation, octopusSolarEstimate, actualTariff, configChangeDetection, pvChangeDetection]);
 
   const loading = consumptionData.loading || solarData.loading || simulation.loading;
   const error = consumptionData.error || solarData.error || simulation.error;
@@ -292,11 +236,11 @@ function App() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setIsDark(!isDark)}
+                onClick={actions.toggleTheme}
                 className="text-white/90 hover:text-white hover:bg-white/10"
                 aria-label="Toggle theme"
               >
-                {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                {ui.isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
             </div>
           </div>
@@ -314,11 +258,11 @@ function App() {
           </div>
         )}
 
-        <div className={`grid gap-6 lg:grid-cols-3 transition-all duration-300 ${!isConnected ? 'blur-sm pointer-events-none select-none' : ''}`}>
+        <div className={`grid gap-6 lg:grid-cols-3 transition-all duration-300 ${!connection.isConnected ? 'blur-sm pointer-events-none select-none' : ''}`}>
           {/* Left Column - Configuration */}
           <div className="lg:col-span-1 space-y-4">
             {/* Connection Status Card - only shown when connected */}
-            {isConnected && (
+            {connection.isConnected && (
               <div className="p-4 rounded-lg border-2 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-700">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -328,13 +272,13 @@ function App() {
                     <div>
                       <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Connected to Octopus</p>
                       <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
-                        <span>{storedPostcode}</span>
-                        {storedDateRange && (
+                        <span>{storedData.postcode}</span>
+                        {storedData.dateRange && (
                           <span className="flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
-                            {new Date(storedDateRange.from).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })}
+                            {new Date(storedData.dateRange.from).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })}
                             {' - '}
-                            {new Date(storedDateRange.to).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })}
+                            {new Date(storedData.dateRange.to).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })}
                           </span>
                         )}
                       </div>
@@ -356,16 +300,16 @@ function App() {
             {/* Scenario Configuration */}
             <ScenarioConfigPanel
               config={scenarioConfig}
-              onChange={handleScenarioChange}
-              onRunSimulation={isConnected ? handleRecalculate : undefined}
+              onChange={actions.setConfig}
+              onRunSimulation={connection.isConnected ? handleRecalculate : undefined}
               isLoading={solarData.loading || simulation.loading}
               hasChanges={configChangeDetection.hasChanged || pvChangeDetection.needsRegeneration}
               actualTariff={actualTariff.importTariff}
               onUseMyTariff={actualTariff.importTariff ? () => {
                 const importTariff = actualTariff.importTariff!;
                 const exportTariff = actualTariff.exportTariff;
-                setScenarioConfig(prev => ({
-                  ...prev,
+                actions.setConfig({
+                  ...scenarioConfig,
                   tariffPreset: 'myTariff' as const,
                   tariff: {
                     import: {
@@ -378,7 +322,7 @@ function App() {
                       ratePence: exportTariff?.unitRatePence ?? 15.0,
                     },
                   },
-                }));
+                });
               } : undefined}
             />
           </div>
@@ -386,7 +330,7 @@ function App() {
           {/* Right Column - Results */}
           <div className="lg:col-span-2 relative min-h-[500px]">
             {/* Stale Results Warning */}
-            {(configChangeDetection.hasChanged || pvChangeDetection.needsRegeneration) && isConnected && hasResults && !loading && (
+            {(configChangeDetection.hasChanged || pvChangeDetection.needsRegeneration) && connection.isConnected && hasResults && !loading && (
               <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-900 rounded-lg flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <RefreshCw className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -423,7 +367,7 @@ function App() {
 
             {/* Results Content */}
             {!loading && (
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+              <Tabs value={ui.activeTab} onValueChange={actions.setActiveTab} className="space-y-6">
                 <TabsList className="grid w-full grid-cols-3 h-auto">
                   <TabsTrigger value="results" className="flex items-center justify-center gap-1 sm:gap-1.5 px-2 py-1.5 text-xs sm:text-sm">
                     <BarChart3 className="h-4 w-4 flex-shrink-0" />
@@ -496,8 +440,8 @@ function App() {
                       <span className="text-sm text-muted-foreground">Showing:</span>
                       <div className="flex rounded-lg border bg-muted p-1">
                         <button
-                          onClick={() => setSelectedScenario('solarOnly')}
-                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${selectedScenario === 'solarOnly'
+                          onClick={() => actions.setSelectedScenario('solarOnly')}
+                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${ui.selectedScenario === 'solarOnly'
                               ? 'bg-background shadow-sm font-medium'
                               : 'hover:bg-background/50'
                             }`}
@@ -505,8 +449,8 @@ function App() {
                           Solar Only
                         </button>
                         <button
-                          onClick={() => setSelectedScenario('withSolar')}
-                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${selectedScenario === 'withSolar'
+                          onClick={() => actions.setSelectedScenario('withSolar')}
+                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${ui.selectedScenario === 'withSolar'
                               ? 'bg-background shadow-sm font-medium'
                               : 'hover:bg-background/50'
                             }`}
@@ -518,11 +462,11 @@ function App() {
                   )}
                   {simulation.withSolar && simulation.solarOnly ? (
                     <EnergyFlowChart
-                      monthlyData={selectedScenario === 'withSolar'
+                      monthlyData={ui.selectedScenario === 'withSolar'
                         ? simulation.withSolar.monthlyBreakdown
                         : simulation.solarOnly.monthlyBreakdown
                       }
-                      scenario={selectedScenario}
+                      scenario={ui.selectedScenario}
                     />
                   ) : (
                     <div className="h-96 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 rounded-lg animate-pulse" />
@@ -536,8 +480,8 @@ function App() {
                       <span className="text-sm text-muted-foreground">Showing:</span>
                       <div className="flex rounded-lg border bg-muted p-1">
                         <button
-                          onClick={() => setSelectedScenario('solarOnly')}
-                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${selectedScenario === 'solarOnly'
+                          onClick={() => actions.setSelectedScenario('solarOnly')}
+                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${ui.selectedScenario === 'solarOnly'
                               ? 'bg-background shadow-sm font-medium'
                               : 'hover:bg-background/50'
                             }`}
@@ -545,8 +489,8 @@ function App() {
                           Solar Only
                         </button>
                         <button
-                          onClick={() => setSelectedScenario('withSolar')}
-                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${selectedScenario === 'withSolar'
+                          onClick={() => actions.setSelectedScenario('withSolar')}
+                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${ui.selectedScenario === 'withSolar'
                               ? 'bg-background shadow-sm font-medium'
                               : 'hover:bg-background/50'
                             }`}
@@ -558,11 +502,11 @@ function App() {
                   )}
                   {simulation.withSolar && simulation.solarOnly ? (
                     <ResultsTable
-                      monthlyData={selectedScenario === 'withSolar'
+                      monthlyData={ui.selectedScenario === 'withSolar'
                         ? simulation.withSolar.monthlyBreakdown
                         : simulation.solarOnly.monthlyBreakdown
                       }
-                      scenario={selectedScenario}
+                      scenario={ui.selectedScenario}
                     />
                   ) : (
                     <div className="h-96 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 rounded-lg animate-pulse" />
@@ -574,7 +518,7 @@ function App() {
         </div>
 
         {/* Overlay CTA when not connected - positioned over entire content area */}
-        {!isConnected && !loading && (
+        {!connection.isConnected && !loading && (
           <div className="absolute inset-0 z-10 flex items-start justify-center pt-20 lg:pt-32">
             <div className="text-center bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm p-8 rounded-2xl shadow-2xl border max-w-md mx-4">
               <div className="p-3 bg-amber-100 dark:bg-amber-900/50 rounded-full w-fit mx-auto mb-4">
@@ -584,7 +528,7 @@ function App() {
               <p className="text-muted-foreground mb-6">
                 Connect your Octopus Energy account to calculate savings based on your actual usage patterns
               </p>
-              <Button onClick={() => setConnectDialogOpen(true)} size="lg">
+              <Button onClick={actions.openConnectDialog} size="lg">
                 <PlugZap className="h-4 w-4" />
                 Connect to Octopus Energy
               </Button>
@@ -619,8 +563,8 @@ function App() {
 
       {/* Connection Dialog */}
       <OctopusConnectDialog
-        open={connectDialogOpen}
-        onOpenChange={setConnectDialogOpen}
+        open={connection.dialogOpen}
+        onOpenChange={actions.setConnectDialogOpen}
         onConnect={handleConnect}
       />
     </div>
