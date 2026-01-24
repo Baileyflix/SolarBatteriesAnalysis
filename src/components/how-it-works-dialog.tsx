@@ -155,22 +155,27 @@ export function HowItWorksDialog({ trigger }: HowItWorksDialogProps) {
                                     <div>Simple Payback = System Cost ÷ Annual Savings</div>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-2">
-                                    Note: This is a simple payback model. It does not account for electricity price inflation,
-                                    panel degradation (~0.5%/year), or time value of money.
+                                    Note: This is a simple payback model. It doesn't account for electricity price inflation
+                                    (which generally helps your ROI), panel degradation (~0.5%/year), maintenance costs,
+                                    or time value of money. Real-world payback could be shorter or longer.
                                 </p>
                             </div>
 
                             <div className="p-4 bg-amber-50 dark:bg-amber-950/50 rounded-lg space-y-2">
                                 <h4 className="font-medium flex items-center gap-2 text-amber-800 dark:text-amber-200">
                                     <Info className="h-4 w-4" />
-                                    Model Limitations
+                                    What This Model Doesn't Include
                                 </h4>
-                                <ul className="text-xs text-amber-700 dark:text-amber-300 space-y-1">
-                                    <li>• Uses horizontal irradiance (real panels are tilted ~35°, gaining ~10-15%)</li>
-                                    <li>• No shading analysis (nearby buildings/trees can reduce output)</li>
-                                    <li>• Assumes south-facing installation (optimal for UK)</li>
-                                    <li>• Greedy dispatch only (no price-optimised charging)</li>
+                                <ul className="text-xs text-amber-700 dark:text-amber-300 space-y-1 list-disc pl-4">
+                                    <li>Panel tilt gains — real panels at ~35° get 10-15% more than our horizontal estimate</li>
+                                    <li>Shading analysis — trees and buildings can significantly reduce output</li>
+                                    <li>Panel orientation — we assume south-facing (optimal for UK)</li>
+                                    <li>Smart tariff optimisation — battery uses simple "greedy" dispatch, not price-optimised</li>
+                                    <li>Equipment degradation — panels lose ~0.5% output per year</li>
                                 </ul>
+                                <p className="text-xs text-amber-700 dark:text-amber-300 pt-2">
+                                    This is why we recommend getting proper quotes from MCS-certified installers who can survey your property.
+                                </p>
                             </div>
                         </div>
                     </TabsContent>
@@ -255,8 +260,9 @@ export function HowItWorksDialog({ trigger }: HowItWorksDialogProps) {
                             <div className="p-3 bg-amber-50 dark:bg-amber-950/50 rounded-lg">
                                 <h4 className="font-medium text-amber-800 dark:text-amber-200">Tariff Data</h4>
                                 <p className="text-sm text-amber-700 dark:text-amber-300">
-                                    Tariff rates are based on publicly available Octopus Energy pricing as of January 2026.
-                                    Actual rates may vary by region and change over time.
+                                    Tariff rates are based on publicly available Octopus Energy pricing and may not reflect
+                                    current rates. When you connect your account, we fetch your actual tariff rates.
+                                    Regional variations apply.
                                 </p>
                             </div>
                         </div>

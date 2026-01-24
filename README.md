@@ -118,10 +118,17 @@ src/
 
 ## Limitations
 
-- **UK only**: Uses UK postcode lookup and Octopus Energy
-- **Flat-rate tariffs**: No Agile/Tracker real-time optimisation yet
-- **Simple battery dispatch**: Greedy algorithm (use solar first, then battery)
-- **No smart scheduling**: Doesn't optimise for time-of-use tariff peaks
+⚠️ **This is a hobby project — please get proper quotes before making decisions!**
+
+- **UK only**: Uses UK postcode lookup and Octopus Energy API
+- **Horizontal irradiance**: Real panels tilted at ~35° gain 10-15% more than our estimate
+- **No shading analysis**: Trees and buildings can significantly reduce output
+- **South-facing assumed**: Other orientations will produce less
+- **Simple battery dispatch**: Uses "greedy" algorithm (solar first, then battery), not price-optimised for TOU tariffs
+- **No degradation modelling**: Panels lose ~0.5% output per year
+- **Simple payback**: Doesn't account for electricity price inflation or time value of money
+
+**Always get quotes from MCS-certified installers** who can survey your property and give accurate figures for your specific situation.
 
 ## Contributing
 

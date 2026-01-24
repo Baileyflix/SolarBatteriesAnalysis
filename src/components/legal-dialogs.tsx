@@ -70,18 +70,19 @@ export function LegalDialogs({ defaultTab = 'disclaimer', trigger }: LegalDialog
                             </p>
                             <ul className="list-disc pl-5 space-y-1">
                                 <li>Your roof might face the wrong way or have shading</li>
-                                <li>Weather varies year to year</li>
-                                <li>Tariff rates change</li>
-                                <li>Equipment degrades over time</li>
+                                <li>Weather varies year to year (we use historical data)</li>
+                                <li>Tariff rates change over time</li>
+                                <li>Equipment degrades (~0.5% per year for panels)</li>
                                 <li>Installation quality matters a lot</li>
+                                <li>Our model uses simple "greedy" battery dispatch, not smart scheduling</li>
                             </ul>
                             <p>
                                 Before spending any money, <strong className="text-foreground">get proper quotes from
                                     MCS-certified installers</strong> who can survey your property. They'll give you
-                                much more accurate figures.
+                                much more accurate figures based on your actual roof, orientation, and local conditions.
                             </p>
                             <p className="text-xs pt-2 border-t">
-                                This isn't financial advice. I'm just a person who made a calculator —
+                                This isn't financial advice. I'm just someone who made a calculator —
                                 I can't be held responsible for any decisions you make based on it.
                             </p>
                         </div>
