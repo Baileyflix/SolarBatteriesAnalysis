@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../@/components/ui/tabs';
 import { Button } from '../@/components/ui/button';
 import { SummaryMetrics } from '@/components/summary-metrics';
@@ -6,6 +6,7 @@ import { CostChart } from '@/components/cost-chart';
 import { ResultsTable } from '@/components/results-table';
 import { EnergyFlowChart } from '@/components/energy-flow-chart';
 import { ScenarioConfigPanel } from '@/components/scenario-config-panel';
+import { ScenarioSelector } from '@/components/scenario-selector';
 import { OctopusConnectDialog } from '@/components/octopus-connect-dialog';
 import { HowItWorksDialog } from '@/components/how-it-works-dialog';
 import { LegalDialogs } from '@/components/legal-dialogs';
@@ -14,11 +15,11 @@ import { useSolarData } from '@/hooks/use-solar-data';
 import { useSimulation } from '@/hooks/use-simulation';
 import { useOctopusSolarEstimate } from '@/hooks/use-octopus-solar-estimate';
 import { useActualTariff } from '@/hooks/use-actual-tariff';
+import { useActualTariffEffect } from '@/hooks/use-actual-tariff-effect';
 import { useAppState } from '@/hooks/use-app-state';
 import { useConfigChangeDetection, usePvSystemChangeDetection } from '@/hooks/use-config-change-detection';
 import { AlertCircle, Zap, RefreshCw, Loader2, PlugZap, LogOut, Moon, Sun, BarChart3, Activity, Table, Github, Calendar } from 'lucide-react';
 import { Badge } from '../@/components/ui/badge';
-import type { TariffConfig } from '@/types';
 
 function App() {
   // Centralized app state management
@@ -38,52 +39,23 @@ function App() {
   const octopusSolarEstimate = useOctopusSolarEstimate();
   const actualTariff = useActualTariff();
 
-  // Config change detection hooks (extracted from App.tsx for cleaner code)
+  // Config change detection hooks
   const configChangeDetection = useConfigChangeDetection(scenarioConfig, connection.isConnected);
   const pvChangeDetection = usePvSystemChangeDetection(scenarioConfig.pvSystem, storedData.hasStoredGeneration);
 
-  // Build and store the actual tariff config when it's fetched
-  // Track if we've already re-run simulation with actual tariff
-  const hasRunWithActualTariffRef = useRef(false);
-
-  // Update stored actual tariff config when fetched
-  // Re-run simulation once when actual tariff becomes available
-  if (actualTariff.importTariff && !actualTariff.loading) {
-    const tariffConfig: TariffConfig = {
-      import: {
-        standardRatePence: actualTariff.importTariff.unitRatePence,
-        standingChargePence: actualTariff.importTariff.standingChargePence,
-      },
-      export: {
-        ratePence: actualTariff.exportTariff?.unitRatePence ?? 15, // Default export rate if no export tariff
-      },
-    };
-    
-    // Store tariff config if not already stored
-    if (!storedData.actualTariffConfig) {
-      actions.storeActualTariffConfig(tariffConfig);
-    }
-
-    // Re-run simulation once when actual tariff becomes available
-    // This ensures actualSpend is calculated after initial connect
-    if (connection.isConnected && storedData.consumption && storedData.generation && !hasRunWithActualTariffRef.current) {
-      hasRunWithActualTariffRef.current = true;
-      simulation.runSimulation({
-        consumption: storedData.consumption,
-        generation: storedData.generation,
-        battery: scenarioConfig.battery,
-        tariff: scenarioConfig.tariff,
-        monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit || undefined,
-        systemCostPounds: scenarioConfig.systemCost || undefined,
-        actualTariff: tariffConfig,
-        actualTariffRates: actualTariff.importTariff?.halfHourlyRates ?? undefined,
-      });
-    }
-  }
-
-  // PV system and config change detection is now handled by hooks:
-  // - configChangeDetection.hasChanged: true when any config field changed
-  // - pvChangeDetection.needsRegeneration: true when PV system changed (requires new solar data)
+  // Handle actual tariff fetch → store → re-simulate flow
+  const actualTariffEffect = useActualTariffEffect({
+    importTariff: actualTariff.importTariff,
+    exportTariff: actualTariff.exportTariff,
+    loading: actualTariff.loading,
+    isConnected: connection.isConnected,
+    consumption: storedData.consumption,
+    generation: storedData.generation,
+    storedActualTariffConfig: storedData.actualTariffConfig,
+    scenarioConfig,
+    storeActualTariffConfig: actions.storeActualTariffConfig,
+    runSimulation: simulation.runSimulation,
+  });
 
   // Recalculate everything - regenerate solar if needed, then run simulation
   const handleRecalculate = useCallback(async () => {
@@ -203,12 +175,12 @@ function App() {
     // Reset config change detection hooks
     configChangeDetection.reset();
     pvChangeDetection.reset();
-    hasRunWithActualTariffRef.current = false;
+    actualTariffEffect.reset();
     // Reset data fetching hooks
     simulation.reset();
     octopusSolarEstimate.reset();
     actualTariff.reset();
-  }, [actions, simulation, octopusSolarEstimate, actualTariff, configChangeDetection, pvChangeDetection]);
+  }, [actions, simulation, octopusSolarEstimate, actualTariff, configChangeDetection, pvChangeDetection, actualTariffEffect]);
 
   const loading = consumptionData.loading || solarData.loading || simulation.loading;
   const error = consumptionData.error || solarData.error || simulation.error;
@@ -434,31 +406,11 @@ function App() {
                 </TabsContent>
 
                 <TabsContent value="energy" className="space-y-6">
-                  {/* Scenario Selector */}
                   {simulation.solarOnly && simulation.withSolar && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">Showing:</span>
-                      <div className="flex rounded-lg border bg-muted p-1">
-                        <button
-                          onClick={() => actions.setSelectedScenario('solarOnly')}
-                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${ui.selectedScenario === 'solarOnly'
-                              ? 'bg-background shadow-sm font-medium'
-                              : 'hover:bg-background/50'
-                            }`}
-                        >
-                          Solar Only
-                        </button>
-                        <button
-                          onClick={() => actions.setSelectedScenario('withSolar')}
-                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${ui.selectedScenario === 'withSolar'
-                              ? 'bg-background shadow-sm font-medium'
-                              : 'hover:bg-background/50'
-                            }`}
-                        >
-                          Solar + Battery
-                        </button>
-                      </div>
-                    </div>
+                    <ScenarioSelector
+                      selected={ui.selectedScenario}
+                      onSelect={actions.setSelectedScenario}
+                    />
                   )}
                   {simulation.withSolar && simulation.solarOnly ? (
                     <EnergyFlowChart
@@ -474,31 +426,11 @@ function App() {
                 </TabsContent>
 
                 <TabsContent value="breakdown" className="space-y-6">
-                  {/* Scenario Selector */}
                   {simulation.solarOnly && simulation.withSolar && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">Showing:</span>
-                      <div className="flex rounded-lg border bg-muted p-1">
-                        <button
-                          onClick={() => actions.setSelectedScenario('solarOnly')}
-                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${ui.selectedScenario === 'solarOnly'
-                              ? 'bg-background shadow-sm font-medium'
-                              : 'hover:bg-background/50'
-                            }`}
-                        >
-                          Solar Only
-                        </button>
-                        <button
-                          onClick={() => actions.setSelectedScenario('withSolar')}
-                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${ui.selectedScenario === 'withSolar'
-                              ? 'bg-background shadow-sm font-medium'
-                              : 'hover:bg-background/50'
-                            }`}
-                        >
-                          Solar + Battery
-                        </button>
-                      </div>
-                    </div>
+                    <ScenarioSelector
+                      selected={ui.selectedScenario}
+                      onSelect={actions.setSelectedScenario}
+                    />
                   )}
                   {simulation.withSolar && simulation.solarOnly ? (
                     <ResultsTable
