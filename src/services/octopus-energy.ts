@@ -908,16 +908,18 @@ export class OctopusEnergyClient {
 
             let nextUrl: string | null = `${url}?period_from=${from.toISOString()}&period_to=${to.toISOString()}&page_size=1500`;
 
+            interface RatesResponse {
+                count: number;
+                next: string | null;
+                results: Array<{
+                    value_inc_vat: number;
+                    valid_from: string;
+                    valid_to: string;
+                }>;
+            }
+
             while (nextUrl) {
-                const response = await axios.get<{
-                    count: number;
-                    next: string | null;
-                    results: Array<{
-                        value_inc_vat: number;
-                        valid_from: string;
-                        valid_to: string;
-                    }>;
-                }>(nextUrl, { timeout: 15000 });
+                const response: { data: RatesResponse } = await axios.get<RatesResponse>(nextUrl, { timeout: 15000 });
 
                 for (const rate of response.data.results) {
                     rates.push({

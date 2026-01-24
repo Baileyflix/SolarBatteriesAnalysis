@@ -10,21 +10,13 @@
  */
 
 import { useRef, useEffect } from 'react';
-import type { TariffConfig, ConsumptionTimeSeries, GenerationTimeSeries } from '@/types';
+import type { TariffConfig, ConsumptionTimeSeries, GenerationTimeSeries, ActualTariffInfo, TariffRatePeriod } from '@/types';
 import type { ScenarioConfig } from '@/components/scenario-config-panel';
-
-interface ActualTariffInfo {
-    displayName: string;
-    unitRatePence: number;
-    standingChargePence: number;
-    isVariable: boolean;
-    halfHourlyRates?: Array<{ validFrom: string; validTo: string; valueIncVat: number }>;
-}
 
 interface UseActualTariffEffectParams {
     // From actualTariff hook
     importTariff: ActualTariffInfo | null;
-    exportTariff: { unitRatePence: number } | null;
+    exportTariff: ActualTariffInfo | null;
     loading: boolean;
 
     // Connection state
@@ -46,7 +38,7 @@ interface UseActualTariffEffectParams {
         monthlyDirectDebitPounds?: number;
         systemCostPounds?: number;
         actualTariff?: TariffConfig;
-        actualTariffRates?: Array<{ validFrom: string; validTo: string; valueIncVat: number }>;
+        actualTariffRates?: TariffRatePeriod[];
     }) => void;
 }
 
@@ -78,10 +70,12 @@ export function useActualTariffEffect({
 
         const tariffConfig: TariffConfig = {
             import: {
+                type: 'flat', // Actual tariffs are treated as flat for simplicity
                 standardRatePence: importTariff.unitRatePence,
                 standingChargePence: importTariff.standingChargePence,
             },
             export: {
+                name: exportTariff?.displayName ?? 'SEG',
                 ratePence: exportTariff?.unitRatePence ?? 15, // Default export rate if no export tariff
             },
         };

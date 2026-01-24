@@ -140,6 +140,7 @@ export function useActualTariff(): UseActualTariffReturn {
     return {
         ...state,
         fetchTariff,
+        fetchHalfHourlyRates,
         reset,
     };
 }

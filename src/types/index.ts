@@ -38,6 +38,7 @@ export type {
     ImportTariff,
     ExportTariff,
     TariffConfig,
+    TariffRatePeriod,
     IntervalCost,
     DailyCost,
     ActualTariffInfo,
