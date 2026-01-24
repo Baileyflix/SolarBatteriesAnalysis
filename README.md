@@ -111,10 +111,10 @@ src/
 
 ## Privacy & Security
 
-- Your Octopus API key is only used client-side and is never sent to our servers
+- Your Octopus API key is only used client-side and is never sent to any server
 - All energy calculations happen in your browser
 - No personal data is collected or stored
-- The app is open source - you can verify exactly what it does
+- No analytics or tracking
 
 ## Limitations
 
@@ -130,14 +130,9 @@ src/
 
 **Always get quotes from MCS-certified installers** who can survey your property and give accurate figures for your specific situation.
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
 ## Licence
 
-MIT
+© 2026 Nick. All rights reserved.
+
+This code is publicly viewable for transparency but is not open source.
+You may not copy, modify, distribute, or use this code without explicit permission.
