@@ -14,99 +14,51 @@ import type { TariffConfig, ConsumptionTimeSeries, GenerationTimeSeries } from '
 import type { ScenarioConfig } from '@/components/scenario-config-panel';
 
 interface ActualTariffInfo {
-  displayName: string;
-  unitRatePence: number;
-  standingChargePence: number;
-  isVariable: boolean;
-  halfHourlyRates?: Array<{ validFrom: string; validTo: string; valueIncVat: number }>;
+    displayName: string;
+    unitRatePence: number;
+    standingChargePence: number;
+    isVariable: boolean;
+    halfHourlyRates?: Array<{ validFrom: string; validTo: string; valueIncVat: number }>;
 }
 
 interface UseActualTariffEffectParams {
-  // From actualTariff hook
-  importTariff: ActualTariffInfo | null;
-  exportTariff: { unitRatePence: number } | null;
-  loading: boolean;
-  
-  // Connection state
-  isConnected: boolean;
-  consumption: ConsumptionTimeSeries | null;
-  generation: GenerationTimeSeries | null;
-  storedActualTariffConfig: TariffConfig | null;
-  
-  // Config
-  scenarioConfig: ScenarioConfig;
-  
-  // Actions
-  storeActualTariffConfig: (config: TariffConfig) => void;
-  runSimulation: (params: {
-    consumption: ConsumptionTimeSeries;
-    generation: GenerationTimeSeries;
-    battery: ScenarioConfig['battery'];
-    tariff: ScenarioConfig['tariff'];
-    monthlyDirectDebitPounds?: number;
-    systemCostPounds?: number;
-    actualTariff?: TariffConfig;
-    actualTariffRates?: Array<{ validFrom: string; validTo: string; valueIncVat: number }>;
-  }) => void;
+    // From actualTariff hook
+    importTariff: ActualTariffInfo | null;
+    exportTariff: { unitRatePence: number } | null;
+    loading: boolean;
+
+    // Connection state
+    isConnected: boolean;
+    consumption: ConsumptionTimeSeries | null;
+    generation: GenerationTimeSeries | null;
+    storedActualTariffConfig: TariffConfig | null;
+
+    // Config
+    scenarioConfig: ScenarioConfig;
+
+    // Actions
+    storeActualTariffConfig: (config: TariffConfig) => void;
+    runSimulation: (params: {
+        consumption: ConsumptionTimeSeries;
+        generation: GenerationTimeSeries;
+        battery: ScenarioConfig['battery'];
+        tariff: ScenarioConfig['tariff'];
+        monthlyDirectDebitPounds?: number;
+        systemCostPounds?: number;
+        actualTariff?: TariffConfig;
+        actualTariffRates?: Array<{ validFrom: string; validTo: string; valueIncVat: number }>;
+    }) => void;
 }
 
 interface UseActualTariffEffectResult {
-  /** Reset the "has run" flag - call on disconnect */
-  reset: () => void;
+    /** Reset the "has run" flag - call on disconnect */
+    reset: () => void;
 }
 
 /**
  * Manages the actual tariff fetch → store → re-simulate flow
  */
 export function useActualTariffEffect({
-  importTariff,
-  exportTariff,
-  loading,
-  isConnected,
-  consumption,
-  generation,
-  storedActualTariffConfig,
-  scenarioConfig,
-  storeActualTariffConfig,
-  runSimulation,
-}: UseActualTariffEffectParams): UseActualTariffEffectResult {
-  // Track if we've already re-run simulation with actual tariff
-  const hasRunWithActualTariffRef = useRef(false);
-
-  useEffect(() => {
-    if (!importTariff || loading) return;
-
-    const tariffConfig: TariffConfig = {
-      import: {
-        standardRatePence: importTariff.unitRatePence,
-        standingChargePence: importTariff.standingChargePence,
-      },
-      export: {
-        ratePence: exportTariff?.unitRatePence ?? 15, // Default export rate if no export tariff
-      },
-    };
-
-    // Store tariff config if not already stored
-    if (!storedActualTariffConfig) {
-      storeActualTariffConfig(tariffConfig);
-    }
-
-    // Re-run simulation once when actual tariff becomes available
-    // This ensures actualSpend is calculated after initial connect
-    if (isConnected && consumption && generation && !hasRunWithActualTariffRef.current) {
-      hasRunWithActualTariffRef.current = true;
-      runSimulation({
-        consumption,
-        generation,
-        battery: scenarioConfig.battery,
-        tariff: scenarioConfig.tariff,
-        monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit || undefined,
-        systemCostPounds: scenarioConfig.systemCost || undefined,
-        actualTariff: tariffConfig,
-        actualTariffRates: importTariff.halfHourlyRates,
-      });
-    }
-  }, [
     importTariff,
     exportTariff,
     loading,
@@ -117,11 +69,59 @@ export function useActualTariffEffect({
     scenarioConfig,
     storeActualTariffConfig,
     runSimulation,
-  ]);
+}: UseActualTariffEffectParams): UseActualTariffEffectResult {
+    // Track if we've already re-run simulation with actual tariff
+    const hasRunWithActualTariffRef = useRef(false);
 
-  const reset = () => {
-    hasRunWithActualTariffRef.current = false;
-  };
+    useEffect(() => {
+        if (!importTariff || loading) return;
 
-  return { reset };
+        const tariffConfig: TariffConfig = {
+            import: {
+                standardRatePence: importTariff.unitRatePence,
+                standingChargePence: importTariff.standingChargePence,
+            },
+            export: {
+                ratePence: exportTariff?.unitRatePence ?? 15, // Default export rate if no export tariff
+            },
+        };
+
+        // Store tariff config if not already stored
+        if (!storedActualTariffConfig) {
+            storeActualTariffConfig(tariffConfig);
+        }
+
+        // Re-run simulation once when actual tariff becomes available
+        // This ensures actualSpend is calculated after initial connect
+        if (isConnected && consumption && generation && !hasRunWithActualTariffRef.current) {
+            hasRunWithActualTariffRef.current = true;
+            runSimulation({
+                consumption,
+                generation,
+                battery: scenarioConfig.battery,
+                tariff: scenarioConfig.tariff,
+                monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit || undefined,
+                systemCostPounds: scenarioConfig.systemCost || undefined,
+                actualTariff: tariffConfig,
+                actualTariffRates: importTariff.halfHourlyRates,
+            });
+        }
+    }, [
+        importTariff,
+        exportTariff,
+        loading,
+        isConnected,
+        consumption,
+        generation,
+        storedActualTariffConfig,
+        scenarioConfig,
+        storeActualTariffConfig,
+        runSimulation,
+    ]);
+
+    const reset = () => {
+        hasRunWithActualTariffRef.current = false;
+    };
+
+    return { reset };
 }

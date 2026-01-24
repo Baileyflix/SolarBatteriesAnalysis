@@ -52,7 +52,7 @@ function getScenarioSubtext(scenario: ScenarioType): string {
 
 export function EnergyFlowChart({ monthlyData, scenario = 'withSolar' }: EnergyFlowChartProps) {
     const isBaseline = scenario === 'baseline';
-    
+
     const chartData = monthlyData.map((month) => ({
         month: formatMonth(month.month),
         fullMonth: month.month,
@@ -68,7 +68,7 @@ export function EnergyFlowChart({ monthlyData, scenario = 'withSolar' }: EnergyF
     const totalGeneration = isBaseline ? 0 : monthlyData.reduce((sum, m) => sum + m.totalGenerationKwh, 0);
     const totalGridImport = monthlyData.reduce((sum, m) => sum + m.gridImportKwh, 0);
     const totalGridExport = isBaseline ? 0 : monthlyData.reduce((sum, m) => sum + m.gridExportKwh, 0);
-    
+
     const badge = getScenarioBadge(scenario);
 
     return (
@@ -83,7 +83,7 @@ export function EnergyFlowChart({ monthlyData, scenario = 'withSolar' }: EnergyF
                             </Badge>
                         </div>
                         <CardDescription>
-                            {isBaseline 
+                            {isBaseline
                                 ? "Your actual usage with all energy from the grid"
                                 : "Your actual usage vs simulated solar generation (based on real weather)"
                             }

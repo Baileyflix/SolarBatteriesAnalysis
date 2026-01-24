@@ -46,7 +46,7 @@ test.describe('Scenario Selector Feature', () => {
             const resultsTab = page.getByRole('tab', { name: /Results/i });
             await resultsTab.focus();
             await expect(resultsTab).toBeFocused();
-            
+
             await page.keyboard.press('ArrowRight');
             await page.keyboard.press('Enter');
 
@@ -57,15 +57,15 @@ test.describe('Scenario Selector Feature', () => {
             // Verify all tabs are present and can receive focus
             const tabs = page.getByRole('tab');
             await expect(tabs).toHaveCount(3);
-            
+
             // First tab can be focused
             await tabs.nth(0).focus();
             await expect(tabs.nth(0)).toBeFocused();
-            
+
             // Can navigate through all tabs with keyboard
             await page.keyboard.press('ArrowRight');
             await expect(tabs.nth(1)).toBeFocused();
-            
+
             await page.keyboard.press('ArrowRight');
             await expect(tabs.nth(2)).toBeFocused();
         });

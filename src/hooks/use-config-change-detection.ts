@@ -28,7 +28,7 @@ export function useConfigChangeDetection(
 
         const currentJson = JSON.stringify(currentConfig);
         const lastJson = JSON.stringify(lastCalcConfigRef.current);
-        
+
         setHasChanged(currentJson !== lastJson);
     }, [currentConfig, isConnected]);
 
@@ -86,14 +86,14 @@ export function usePvSystemChangeDetection(
         }
 
         const prev = previousPvSystemRef.current;
-        const hasChanged = 
+        const hasChanged =
             prev.systemSizeKwp !== pvSystem.systemSizeKwp ||
             prev.performanceRatio !== pvSystem.performanceRatio;
 
         if (hasChanged) {
             setNeedsRegeneration(true);
         }
-        
+
         previousPvSystemRef.current = pvSystem;
     }, [pvSystem, hasStoredGeneration]);
 

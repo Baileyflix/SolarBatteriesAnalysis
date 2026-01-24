@@ -50,7 +50,7 @@ function getScenarioDescription(scenario: ScenarioType): string {
 export function ResultsTable({ monthlyData, scenario = 'withSolar' }: ResultsTableProps) {
     const isBaseline = scenario === 'baseline';
     const badge = getScenarioBadge(scenario);
-    
+
     return (
         <Card>
             <CardHeader>

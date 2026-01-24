@@ -18,6 +18,7 @@ import { useSimulation } from '@/hooks/use-simulation';
 import { useOctopusSolarEstimate } from '@/hooks/use-octopus-solar-estimate';
 import { useActualTariff } from '@/hooks/use-actual-tariff';
 import { useActualTariffEffect } from '@/hooks/use-actual-tariff-effect';
+import { useTariffSelection } from '@/hooks/use-tariff-selection';
 import { useAppState } from '@/hooks/use-app-state';
 import { useConfigChangeDetection, usePvSystemChangeDetection } from '@/hooks/use-config-change-detection';
 import { AlertCircle, Loader2, BarChart3, Activity, Table } from 'lucide-react';
@@ -44,6 +45,14 @@ function App() {
   // Config change detection hooks
   const configChangeDetection = useConfigChangeDetection(scenarioConfig, connection.isConnected);
   const pvChangeDetection = usePvSystemChangeDetection(scenarioConfig.pvSystem, storedData.hasStoredGeneration);
+
+  // Tariff selection (switching between presets and user's actual tariff)
+  const tariffSelection = useTariffSelection({
+    scenarioConfig,
+    importTariff: actualTariff.importTariff,
+    exportTariff: actualTariff.exportTariff,
+    setConfig: actions.setConfig,
+  });
 
   // Handle actual tariff fetch → store → re-simulate flow
   const actualTariffEffect = useActualTariffEffect({
@@ -222,26 +231,8 @@ function App() {
               onRunSimulation={connection.isConnected ? handleRecalculate : undefined}
               isLoading={solarData.loading || simulation.loading}
               hasChanges={configChangeDetection.hasChanged || pvChangeDetection.needsRegeneration}
-              actualTariff={actualTariff.importTariff}
-              onUseMyTariff={actualTariff.importTariff ? () => {
-                const importTariff = actualTariff.importTariff!;
-                const exportTariff = actualTariff.exportTariff;
-                actions.setConfig({
-                  ...scenarioConfig,
-                  tariffPreset: 'myTariff' as const,
-                  tariff: {
-                    import: {
-                      type: importTariff.isVariable ? 'agile' : 'flat',
-                      standardRatePence: importTariff.unitRatePence,
-                      standingChargePence: importTariff.standingChargePence,
-                    },
-                    export: {
-                      name: exportTariff?.displayName ?? 'Standard Export',
-                      ratePence: exportTariff?.unitRatePence ?? 15.0,
-                    },
-                  },
-                });
-              } : undefined}
+              actualTariff={tariffSelection.actualTariffInfo}
+              onUseMyTariff={tariffSelection.selectActualTariff}
             />
           </div>
 
