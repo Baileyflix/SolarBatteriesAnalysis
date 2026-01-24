@@ -12,13 +12,14 @@ import {
     ReferenceLine,
 } from 'recharts';
 import type { MonthlyFinancialSummary } from '@/types';
-import { Info } from 'lucide-react';
+import { Info, Battery, Sun } from 'lucide-react';
 
 interface EnergyFlowChartProps {
     monthlyData: MonthlyFinancialSummary[];
+    scenario?: 'solarOnly' | 'withSolar';
 }
 
-export function EnergyFlowChart({ monthlyData }: EnergyFlowChartProps) {
+export function EnergyFlowChart({ monthlyData, scenario = 'withSolar' }: EnergyFlowChartProps) {
     const chartData = monthlyData.map((month) => ({
         month: formatMonth(month.month),
         fullMonth: month.month,
@@ -40,9 +41,21 @@ export function EnergyFlowChart({ monthlyData }: EnergyFlowChartProps) {
             <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>
-                        <CardTitle>Energy Flow Analysis</CardTitle>
+                        <div className="flex items-center gap-2 mb-1">
+                            <CardTitle>Energy Flow Analysis</CardTitle>
+                            <Badge variant="outline" className={scenario === 'withSolar'
+                                ? "text-emerald-700 bg-emerald-50 border-emerald-300"
+                                : "text-amber-700 bg-amber-50 border-amber-300"
+                            }>
+                                {scenario === 'withSolar' ? (
+                                    <><Battery className="h-3 w-3 mr-1" />Solar + Battery</>
+                                ) : (
+                                    <><Sun className="h-3 w-3 mr-1" />Solar Only</>
+                                )}
+                            </Badge>
+                        </div>
                         <CardDescription>
-                            Your actual usage vs what solar would have generated (based on real weather)
+                            Your actual usage vs simulated solar generation (based on real weather)
                         </CardDescription>
                     </div>
                     <div className="flex gap-2">
@@ -62,23 +75,23 @@ export function EnergyFlowChart({ monthlyData }: EnergyFlowChartProps) {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
                     <div className="text-center">
                         <div className="text-xs text-muted-foreground mb-1">Your Usage</div>
-                        <div className="text-lg font-bold text-slate-700">{Math.round(totalConsumption).toLocaleString()} kWh</div>
+                        <div className="text-lg font-bold text-slate-700 dark:text-slate-300">{Math.round(totalConsumption).toLocaleString()} kWh</div>
                         <div className="text-[10px] text-muted-foreground">actual from Octopus</div>
                     </div>
                     <div className="text-center">
-                        <div className="text-xs text-muted-foreground mb-1">Solar Generation</div>
+                        <div className="text-xs text-muted-foreground mb-1">Solar Generated</div>
                         <div className="text-lg font-bold text-amber-600">{Math.round(totalGeneration).toLocaleString()} kWh</div>
-                        <div className="text-[10px] text-muted-foreground">based on real weather</div>
+                        <div className="text-[10px] text-muted-foreground">simulated</div>
                     </div>
                     <div className="text-center">
-                        <div className="text-xs text-muted-foreground mb-1">Grid Import</div>
+                        <div className="text-xs text-muted-foreground mb-1">Would Import</div>
                         <div className="text-lg font-bold text-red-600">{Math.round(totalGridImport).toLocaleString()} kWh</div>
-                        <div className="text-[10px] text-muted-foreground">would have bought</div>
+                        <div className="text-[10px] text-muted-foreground">{scenario === 'withSolar' ? 'with solar + battery' : 'with solar only'}</div>
                     </div>
                     <div className="text-center">
-                        <div className="text-xs text-muted-foreground mb-1">Grid Export</div>
+                        <div className="text-xs text-muted-foreground mb-1">Would Export</div>
                         <div className="text-lg font-bold text-green-600">{Math.round(totalGridExport).toLocaleString()} kWh</div>
-                        <div className="text-[10px] text-muted-foreground">would have sold</div>
+                        <div className="text-[10px] text-muted-foreground">{scenario === 'withSolar' ? 'with solar + battery' : 'with solar only'}</div>
                     </div>
                 </div>
 

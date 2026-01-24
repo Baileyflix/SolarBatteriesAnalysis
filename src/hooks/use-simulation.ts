@@ -113,17 +113,17 @@ function calculateActualCostsWithTOURates(
         const timestamp = new Date(record.intervalStart);
         const month = record.intervalStart.substring(0, 7); // YYYY-MM
         const date = record.intervalStart.substring(0, 10); // YYYY-MM-DD
-        
+
         // Get rate for this time slot
         const timeKey = timestamp.getTime();
         const ratePence = rateMap.get(timeKey) ?? tariff.import.standardRatePence;
-        
+
         const costPence = record.consumption * ratePence;
-        
-        const existing = monthlyMap.get(month) ?? { 
-            consumptionKwh: 0, 
-            importCostPence: 0, 
-            days: new Set<string>() 
+
+        const existing = monthlyMap.get(month) ?? {
+            consumptionKwh: 0,
+            importCostPence: 0,
+            days: new Set<string>()
         };
         existing.consumptionKwh += record.consumption;
         existing.importCostPence += costPence;
@@ -209,7 +209,6 @@ export function useSimulation(): UseSimulationResult {
                         params.actualTariff,
                         params.actualTariffRates
                     );
-                    console.log('[Simulation] Calculated actual spend with TOU rates:', actualSpendResult.totalNetCostPounds);
                 } else {
                     // Fallback to flat rate calculation
                     const actualMonthly = aggregateToMonthly(baselineFlows, params.actualTariff);

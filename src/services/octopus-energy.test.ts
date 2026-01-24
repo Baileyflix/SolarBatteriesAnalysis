@@ -41,12 +41,12 @@ async function runTests() {
     try {
         const discovery = await client.discoverAccounts();
         console.log(`  ✅ Found ${discovery.accounts.length} account(s)`);
-        
+
         for (const account of discovery.accounts) {
             console.log(`     Account: ${account.number} (${account.status})`);
             accountNumber = account.number;
         }
-        
+
         console.log(`  ✅ Found ${discovery.meters.length} meter(s)`);
         for (const meter of discovery.meters) {
             console.log(`     MPAN: ${meter.mpan}`);
@@ -65,7 +65,7 @@ async function runTests() {
     if (accountNumber) {
         try {
             const tariffs = await client.fetchActualTariff(accountNumber);
-            
+
             if (tariffs) {
                 if (tariffs.import) {
                     console.log('  ✅ Import Tariff:');
@@ -80,7 +80,7 @@ async function runTests() {
                 } else {
                     console.log('  ⚠️ No import tariff found');
                 }
-                
+
                 if (tariffs.export) {
                     console.log('  ✅ Export Tariff:');
                     console.log(`     Product: ${tariffs.export.productCode}`);
@@ -106,7 +106,7 @@ async function runTests() {
         try {
             const now = new Date();
             const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            
+
             const consumption = await client.fetchConsumption({
                 mpan,
                 serialNumber,
@@ -114,11 +114,11 @@ async function runTests() {
                 periodTo: now.toISOString(),
                 apiKey: API_KEY,
             });
-            
+
             console.log(`  ✅ Fetched ${consumption.records.length} consumption records`);
             console.log(`     MPAN: ${consumption.mpan}`);
             console.log(`     Period: ${consumption.periodStart} to ${consumption.periodEnd}`);
-            
+
             if (consumption.records.length > 0) {
                 const totalKwh = consumption.records.reduce((sum, r) => sum + r.consumption, 0);
                 console.log(`     Total consumption: ${totalKwh.toFixed(2)} kWh`);
@@ -138,7 +138,7 @@ async function runTests() {
         try {
             const now = new Date();
             const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            
+
             const daily = await client.fetchDailyConsumption({
                 mpan,
                 serialNumber,
@@ -146,9 +146,9 @@ async function runTests() {
                 periodTo: now.toISOString(),
                 apiKey: API_KEY,
             });
-            
+
             console.log(`  ✅ Fetched ${daily.length} daily records`);
-            
+
             if (daily.length > 0) {
                 const totalKwh = daily.reduce((sum, d) => sum + d.consumptionKwh, 0);
                 const avgDaily = totalKwh / daily.length;

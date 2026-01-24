@@ -17,22 +17,12 @@ interface SummaryMetricsProps {
 export function SummaryMetrics({ comparison, roi, solarOnly, usingActualTariff, actualTariff, actualSpend }: SummaryMetricsProps) {
     const { baseline, withSolar, savingsPercentage } = comparison;
 
-    // Debug logging
-    console.log('[SummaryMetrics] Props:', {
-        usingActualTariff,
-        actualTariff: actualTariff?.displayName,
-        actualSpendTotal: actualSpend?.totalNetCostPounds,
-        baselineTotal: baseline.totalNetCostPounds,
-    });
-
     // Determine the reference point for savings calculation
     const hasValidActualSpend = actualSpend && !isNaN(actualSpend.totalNetCostPounds);
     const showActualSpend = hasValidActualSpend && !usingActualTariff;
-    
-    console.log('[SummaryMetrics] Decision:', { hasValidActualSpend, showActualSpend });
-    
+
     // Calculate savings vs actual spend if available, otherwise vs baseline
-    const savingsVsReference = showActualSpend 
+    const savingsVsReference = showActualSpend
         ? actualSpend!.totalNetCostPounds - withSolar.totalNetCostPounds
         : baseline.totalNetCostPounds - withSolar.totalNetCostPounds;
 

@@ -795,12 +795,12 @@ export class OctopusEnergyClient {
                 const validFrom = new Date(agreement.validFrom);
                 const validTo = agreement.validTo ? new Date(agreement.validTo) : null;
                 const isActive = validFrom <= now && (!validTo || validTo >= now);
-                
+
                 if (!isActive) continue;
 
                 // Get the unit rate - for HalfHourly tariffs, we need to fetch from REST API
                 let unitRatePence = tariff.unitRate ?? tariff.dayRate ?? 0;
-                
+
                 // If no rate is available (HalfHourly tariff), try to fetch from REST API
                 if (unitRatePence === 0 && tariff.productCode && tariff.tariffCode) {
                     try {
@@ -822,8 +822,8 @@ export class OctopusEnergyClient {
                     unitRatePence,
                     standingChargePence: tariff.standingCharge ?? 0,
                     isVariable: tariff.tariffCode?.toLowerCase().includes('agile') ||
-                               tariff.tariffCode?.toLowerCase().includes('tracker') ||
-                               tariff.tariffCode?.toLowerCase().includes('cosy'),
+                        tariff.tariffCode?.toLowerCase().includes('tracker') ||
+                        tariff.tariffCode?.toLowerCase().includes('cosy'),
                     validFrom: agreement.validFrom,
                     validTo: agreement.validTo,
                 };
@@ -896,7 +896,7 @@ export class OctopusEnergyClient {
         periodTo: Date
     ): Promise<TariffRatePeriod[]> {
         const rates: TariffRatePeriod[] = [];
-        
+
         try {
             // Format dates for API (extend range slightly to ensure coverage)
             const from = new Date(periodFrom);
@@ -905,7 +905,7 @@ export class OctopusEnergyClient {
             to.setDate(to.getDate() + 1);
 
             const url = `https://api.octopus.energy/v1/products/${productCode}/electricity-tariffs/${tariffCode}/standard-unit-rates/`;
-            
+
             let nextUrl: string | null = `${url}?period_from=${from.toISOString()}&period_to=${to.toISOString()}&page_size=1500`;
 
             while (nextUrl) {
@@ -946,25 +946,25 @@ export class OctopusEnergyClient {
      */
     static getRateForTimestamp(rates: TariffRatePeriod[], timestamp: Date): number | null {
         const time = timestamp.getTime();
-        
+
         for (const rate of rates) {
             const from = new Date(rate.validFrom).getTime();
             const to = new Date(rate.validTo).getTime();
-            
+
             if (time >= from && time < to) {
                 return rate.ratePence;
             }
         }
-        
+
         return null;
     }
 
     /**
      * Analyze half-hourly rates to extract peak/off-peak/standard rates
      */
-    static analyzeRates(rates: TariffRatePeriod[]): { 
-        offPeak: number; 
-        standard: number; 
+    static analyzeRates(rates: TariffRatePeriod[]): {
+        offPeak: number;
+        standard: number;
         peak: number;
         weighted: number;
     } {
@@ -973,7 +973,7 @@ export class OctopusEnergyClient {
         }
 
         const uniqueRates = [...new Set(rates.map(r => Math.round(r.ratePence * 100) / 100))].sort((a, b) => a - b);
-        
+
         // Calculate weighted average
         let totalHours = 0;
         let weightedSum = 0;
@@ -988,25 +988,25 @@ export class OctopusEnergyClient {
 
         if (uniqueRates.length === 1) {
             // Flat rate tariff
-            return { 
-                offPeak: uniqueRates[0] ?? 0, 
-                standard: uniqueRates[0] ?? 0, 
+            return {
+                offPeak: uniqueRates[0] ?? 0,
+                standard: uniqueRates[0] ?? 0,
                 peak: uniqueRates[0] ?? 0,
                 weighted: uniqueRates[0] ?? 0
             };
         } else if (uniqueRates.length === 2) {
             // Two-rate tariff (day/night)
-            return { 
-                offPeak: uniqueRates[0] ?? 0, 
-                standard: uniqueRates[1] ?? 0, 
+            return {
+                offPeak: uniqueRates[0] ?? 0,
+                standard: uniqueRates[1] ?? 0,
                 peak: uniqueRates[1] ?? 0,
                 weighted
             };
         } else {
             // Three or more rates (TOU like Cosy, Flux)
-            return { 
-                offPeak: uniqueRates[0] ?? 0, 
-                standard: uniqueRates[Math.floor(uniqueRates.length / 2)] ?? 0, 
+            return {
+                offPeak: uniqueRates[0] ?? 0,
+                standard: uniqueRates[Math.floor(uniqueRates.length / 2)] ?? 0,
                 peak: uniqueRates[uniqueRates.length - 1] ?? 0,
                 weighted
             };

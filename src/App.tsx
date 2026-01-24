@@ -14,12 +14,13 @@ import { useSolarData } from '@/hooks/use-solar-data';
 import { useSimulation } from '@/hooks/use-simulation';
 import { useOctopusSolarEstimate } from '@/hooks/use-octopus-solar-estimate';
 import { useActualTariff } from '@/hooks/use-actual-tariff';
+import { useConfigChangeDetection, usePvSystemChangeDetection } from '@/hooks/use-config-change-detection';
 import { AlertCircle, Zap, RefreshCw, Loader2, PlugZap, LogOut, Moon, Sun, BarChart3, Activity, Table, Github, Calendar } from 'lucide-react';
 import { Badge } from '../@/components/ui/badge';
 import { UK_BATTERY_PRESETS } from '@/lib/battery-engine';
 import { UK_PV_PRESETS } from '@/lib/solar-generator';
 import { UK_TARIFF_PRESETS } from '@/lib/cost-engine';
-import type { PVSystemConfig, ConsumptionTimeSeries, GenerationTimeSeries, TariffConfig } from '@/types';
+import type { ConsumptionTimeSeries, GenerationTimeSeries, TariffConfig } from '@/types';
 
 // Default scenario configuration
 function createDefaultConfig(): ScenarioConfig {
@@ -60,23 +61,22 @@ function App() {
   const [storedApiKey, setStoredApiKey] = useState<string>('');
   const [storedAccountNumber, setStoredAccountNumber] = useState<string>('');
   const [isConnected, setIsConnected] = useState(false);
-  
+
   // Store user's actual tariff as TariffConfig for calculating real historical spend
   const [storedActualTariffConfig, setStoredActualTariffConfig] = useState<TariffConfig | null>(null);
 
   // Scenario configuration for dynamic adjustments
   const [scenarioConfig, setScenarioConfig] = useState<ScenarioConfig>(createDefaultConfig);
 
-  // Track if we need to regenerate solar data (when PV system changes)
-  const [needsRegeneration, setNeedsRegeneration] = useState(false);
-  const previousPvSystemRef = useRef<PVSystemConfig | null>(null);
-  
-  // Track if config has changed since last calculation (requires recalculate)
-  const [configChangedSinceLastCalc, setConfigChangedSinceLastCalc] = useState(false);
-  const lastCalcConfigRef = useRef<ScenarioConfig | null>(null);
+  // Config change detection hooks (extracted from App.tsx for cleaner code)
+  const configChangeDetection = useConfigChangeDetection(scenarioConfig, isConnected);
+  const pvChangeDetection = usePvSystemChangeDetection(scenarioConfig.pvSystem, storedGeneration !== null);
 
   // Track active tab
   const [activeTab, setActiveTab] = useState('results');
+
+  // Scenario selector for Energy/Data tabs
+  const [selectedScenario, setSelectedScenario] = useState<'solarOnly' | 'withSolar'>('withSolar');
 
   // Theme toggle
   const [isDark, setIsDark] = useState(() => {
@@ -107,12 +107,11 @@ function App() {
         },
       };
       setStoredActualTariffConfig(tariffConfig);
-      
+
       // Re-run simulation once when actual tariff becomes available
       // This ensures actualSpend is calculated after initial connect
       if (isConnected && storedConsumption && storedGeneration && !hasRunWithActualTariffRef.current) {
         hasRunWithActualTariffRef.current = true;
-        console.log('[App] Re-running simulation with actual tariff data');
         simulation.runSimulation({
           consumption: storedConsumption,
           generation: storedGeneration,
@@ -127,49 +126,18 @@ function App() {
     }
   }, [actualTariff.importTariff, actualTariff.exportTariff, actualTariff.loading, isConnected, storedConsumption, storedGeneration]);
 
-  // Check if PV system config changed (needs new solar generation)
-  useEffect(() => {
-    if (previousPvSystemRef.current && storedGeneration) {
-      const prevSize = previousPvSystemRef.current.systemSizeKwp;
-      const newSize = scenarioConfig.pvSystem.systemSizeKwp;
-      const prevRatio = previousPvSystemRef.current.performanceRatio;
-      const newRatio = scenarioConfig.pvSystem.performanceRatio;
-
-      if (prevSize !== newSize || prevRatio !== newRatio) {
-        setNeedsRegeneration(true);
-      }
-    }
-    previousPvSystemRef.current = scenarioConfig.pvSystem;
-  }, [scenarioConfig.pvSystem, storedGeneration]);
-
-  // Track config changes - mark as needing recalculation when any config changes
-  useEffect(() => {
-    if (!lastCalcConfigRef.current || !storedConsumption) return;
-    
-    const last = lastCalcConfigRef.current;
-    const current = scenarioConfig;
-    
-    // Check if any config has changed since last calculation
-    const hasChanged = 
-      last.battery.capacityKwh !== current.battery.capacityKwh ||
-      last.tariffPreset !== current.tariffPreset ||
-      last.tariff.import.standardRatePence !== current.tariff.import.standardRatePence ||
-      last.tariff.export.ratePence !== current.tariff.export.ratePence ||
-      last.systemCost !== current.systemCost ||
-      last.monthlyDirectDebit !== current.monthlyDirectDebit ||
-      last.pvSystem.systemSizeKwp !== current.pvSystem.systemSizeKwp;
-      
-    setConfigChangedSinceLastCalc(hasChanged);
-  }, [scenarioConfig, storedConsumption]);
+  // PV system and config change detection is now handled by hooks:
+  // - configChangeDetection.hasChanged: true when any config field changed
+  // - pvChangeDetection.needsRegeneration: true when PV system changed (requires new solar data)
 
   // Recalculate everything - regenerate solar if needed, then run simulation
   const handleRecalculate = useCallback(async () => {
     if (!storedPostcode || !storedDateRange || !storedConsumption) return;
 
     let generationToUse = storedGeneration;
-    
+
     // Regenerate solar data if PV system changed
-    if (needsRegeneration || !storedGeneration) {
+    if (pvChangeDetection.needsRegeneration || !storedGeneration) {
       const newGeneration = await solarData.generateData({
         postcode: storedPostcode,
         periodFrom: storedDateRange.from,
@@ -179,7 +147,7 @@ function App() {
 
       if (newGeneration) {
         setStoredGeneration(newGeneration);
-        setNeedsRegeneration(false);
+        pvChangeDetection.markAsRegenerated();
         generationToUse = newGeneration;
       }
     }
@@ -196,12 +164,11 @@ function App() {
         actualTariff: storedActualTariffConfig ?? undefined,
         actualTariffRates: actualTariff.importTariff?.halfHourlyRates ?? undefined,
       });
-      
-      // Store the config we just calculated with
-      lastCalcConfigRef.current = { ...scenarioConfig };
-      setConfigChangedSinceLastCalc(false);
+
+      // Mark config as calculated (clears the hasChanged flag)
+      configChangeDetection.markAsCalculated();
     }
-  }, [storedPostcode, storedDateRange, scenarioConfig, storedConsumption, storedGeneration, needsRegeneration, solarData, simulation, storedActualTariffConfig, actualTariff.importTariff?.halfHourlyRates]);
+  }, [storedPostcode, storedDateRange, scenarioConfig, storedConsumption, storedGeneration, pvChangeDetection, solarData, simulation, storedActualTariffConfig, actualTariff.importTariff?.halfHourlyRates, configChangeDetection]);
 
   // Handle connection from dialog
   const handleConnect = async (data: {
@@ -254,7 +221,6 @@ function App() {
     }
     if (solarResult) {
       setStoredGeneration(solarResult);
-      previousPvSystemRef.current = scenarioConfig.pvSystem;
     }
 
     // Run simulation if both datasets loaded successfully
@@ -268,9 +234,8 @@ function App() {
         systemCostPounds: scenarioConfig.systemCost,
       });
       setIsConnected(true);
-      // Store the config we calculated with
-      lastCalcConfigRef.current = { ...scenarioConfig };
-      setConfigChangedSinceLastCalc(false);
+      // Mark config as calculated
+      configChangeDetection.markAsCalculated();
     }
   };
 
@@ -284,10 +249,9 @@ function App() {
     setStoredApiKey('');
     setStoredAccountNumber('');
     setStoredActualTariffConfig(null);
-    setNeedsRegeneration(false);
-    setConfigChangedSinceLastCalc(false);
-    previousPvSystemRef.current = null;
-    lastCalcConfigRef.current = null;
+    // Reset config change detection hooks
+    configChangeDetection.reset();
+    pvChangeDetection.reset();
     hasRunWithActualTariffRef.current = false;
     setScenarioConfig(createDefaultConfig());
     simulation.reset();
@@ -295,7 +259,7 @@ function App() {
     actualTariff.reset();
     // Clear any localStorage if we ever store anything
     localStorage.removeItem('solar-calculator-preferences');
-  }, [simulation, octopusSolarEstimate, actualTariff]);
+  }, [simulation, octopusSolarEstimate, actualTariff, configChangeDetection, pvChangeDetection]);
 
   // Handle scenario config changes
   const handleScenarioChange = useCallback((newConfig: ScenarioConfig) => {
@@ -312,7 +276,7 @@ function App() {
       <header className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 dark:from-amber-600 dark:via-orange-600 dark:to-amber-700">
         <div className="container mx-auto px-4 py-5 md:px-8 md:py-6">
           <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               <div className="p-1.5 sm:p-2 bg-white/10 rounded-xl flex-shrink-0">
                 <Zap className="h-5 w-5 sm:h-7 sm:w-7 text-white" />
               </div>
@@ -395,7 +359,7 @@ function App() {
               onChange={handleScenarioChange}
               onRunSimulation={isConnected ? handleRecalculate : undefined}
               isLoading={solarData.loading || simulation.loading}
-              hasChanges={configChangedSinceLastCalc || needsRegeneration}
+              hasChanges={configChangeDetection.hasChanged || pvChangeDetection.needsRegeneration}
               actualTariff={actualTariff.importTariff}
               onUseMyTariff={actualTariff.importTariff ? () => {
                 const importTariff = actualTariff.importTariff!;
@@ -422,7 +386,7 @@ function App() {
           {/* Right Column - Results */}
           <div className="lg:col-span-2 relative min-h-[500px]">
             {/* Stale Results Warning */}
-            {(configChangedSinceLastCalc || needsRegeneration) && isConnected && hasResults && !loading && (
+            {(configChangeDetection.hasChanged || pvChangeDetection.needsRegeneration) && isConnected && hasResults && !loading && (
               <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-900 rounded-lg flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <RefreshCw className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -442,7 +406,7 @@ function App() {
                 </Button>
               </div>
             )}
-            
+
             {/* Loading State */}
             {loading && (
               <div className="flex items-center justify-center p-12 bg-muted/30 rounded-lg">
@@ -526,16 +490,80 @@ function App() {
                 </TabsContent>
 
                 <TabsContent value="energy" className="space-y-6">
-                  {simulation.withSolar ? (
-                    <EnergyFlowChart monthlyData={simulation.withSolar.monthlyBreakdown} />
+                  {/* Scenario Selector */}
+                  {simulation.solarOnly && simulation.withSolar && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Showing:</span>
+                      <div className="flex rounded-lg border bg-muted p-1">
+                        <button
+                          onClick={() => setSelectedScenario('solarOnly')}
+                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${selectedScenario === 'solarOnly'
+                              ? 'bg-background shadow-sm font-medium'
+                              : 'hover:bg-background/50'
+                            }`}
+                        >
+                          Solar Only
+                        </button>
+                        <button
+                          onClick={() => setSelectedScenario('withSolar')}
+                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${selectedScenario === 'withSolar'
+                              ? 'bg-background shadow-sm font-medium'
+                              : 'hover:bg-background/50'
+                            }`}
+                        >
+                          Solar + Battery
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {simulation.withSolar && simulation.solarOnly ? (
+                    <EnergyFlowChart
+                      monthlyData={selectedScenario === 'withSolar'
+                        ? simulation.withSolar.monthlyBreakdown
+                        : simulation.solarOnly.monthlyBreakdown
+                      }
+                      scenario={selectedScenario}
+                    />
                   ) : (
                     <div className="h-96 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 rounded-lg animate-pulse" />
                   )}
                 </TabsContent>
 
                 <TabsContent value="breakdown" className="space-y-6">
-                  {simulation.withSolar ? (
-                    <ResultsTable monthlyData={simulation.withSolar.monthlyBreakdown} />
+                  {/* Scenario Selector */}
+                  {simulation.solarOnly && simulation.withSolar && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Showing:</span>
+                      <div className="flex rounded-lg border bg-muted p-1">
+                        <button
+                          onClick={() => setSelectedScenario('solarOnly')}
+                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${selectedScenario === 'solarOnly'
+                              ? 'bg-background shadow-sm font-medium'
+                              : 'hover:bg-background/50'
+                            }`}
+                        >
+                          Solar Only
+                        </button>
+                        <button
+                          onClick={() => setSelectedScenario('withSolar')}
+                          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${selectedScenario === 'withSolar'
+                              ? 'bg-background shadow-sm font-medium'
+                              : 'hover:bg-background/50'
+                            }`}
+                        >
+                          Solar + Battery
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {simulation.withSolar && simulation.solarOnly ? (
+                    <ResultsTable
+                      monthlyData={selectedScenario === 'withSolar'
+                        ? simulation.withSolar.monthlyBreakdown
+                        : simulation.solarOnly.monthlyBreakdown
+                      }
+                      scenario={selectedScenario}
+                    />
                   ) : (
                     <div className="h-96 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 rounded-lg animate-pulse" />
                   )}

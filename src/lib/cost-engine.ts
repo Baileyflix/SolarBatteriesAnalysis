@@ -20,17 +20,17 @@ export class CostEngine {
     private getImportRateForTimestamp(timestamp: Date): number {
         if (this.halfHourlyRates.length > 0) {
             const time = timestamp.getTime();
-            
+
             for (const rate of this.halfHourlyRates) {
                 const from = new Date(rate.validFrom).getTime();
                 const to = new Date(rate.validTo).getTime();
-                
+
                 if (time >= from && time < to) {
                     return rate.ratePence;
                 }
             }
         }
-        
+
         // Fallback to flat rate
         return this.tariffConfig.import.standardRatePence;
     }
@@ -415,7 +415,7 @@ export function getTariffsByEligibility(eligibility: TariffEligibility | 'all' =
     if (eligibility === 'all') {
         return UK_TARIFF_PRESETS;
     }
-    
+
     // Users with solar can access solar and standard tariffs
     // Users with EV can access EV, solar (if they have solar), and standard tariffs
     // Users with heat pump can access heat pump, solar (if they have solar), and standard tariffs

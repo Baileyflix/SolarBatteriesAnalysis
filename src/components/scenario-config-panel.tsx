@@ -182,7 +182,7 @@ export function ScenarioConfigPanel({
             });
             return;
         }
-        
+
         // Standard preset handling
         if (preset !== 'myTariff') {
             const tariffConfig = UK_TARIFF_PRESETS[preset];
@@ -497,7 +497,7 @@ export function ScenarioConfigPanel({
                                 )}
                             </div>
                             <p className="text-[10px] sm:text-xs text-muted-foreground">
-                                {config.tariffPreset === 'myTariff' 
+                                {config.tariffPreset === 'myTariff'
                                     ? 'Using your actual Octopus Energy tariff rates for accurate calculations.'
                                     : UK_TARIFF_PRESETS[config.tariffPreset].description}
                             </p>

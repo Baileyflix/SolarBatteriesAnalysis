@@ -42,7 +42,7 @@ export function useActualTariff(): UseActualTariffReturn {
         try {
             const client = new OctopusEnergyClient(apiKey);
             setClientRef(client);
-            
+
             const result = await client.fetchActualTariff(accountNumber);
 
             if (!result) {
@@ -57,7 +57,7 @@ export function useActualTariff(): UseActualTariffReturn {
             }
 
             let importTariff = result.import ?? null;
-            
+
             // If we have a date range and a TOU tariff, fetch half-hourly rates
             if (importTariff && dateRange && importTariff.isVariable) {
                 try {
@@ -67,7 +67,7 @@ export function useActualTariff(): UseActualTariffReturn {
                         dateRange.from,
                         dateRange.to
                     );
-                    
+
                     if (rates.length > 0) {
                         const analysis = OctopusEnergyClient.analyzeRates(rates);
                         importTariff = {
@@ -113,7 +113,7 @@ export function useActualTariff(): UseActualTariffReturn {
         if (!clientRef || !state.importTariff) {
             return [];
         }
-        
+
         try {
             return await clientRef.fetchHalfHourlyRates(
                 state.importTariff.productCode,

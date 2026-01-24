@@ -7,21 +7,37 @@ import {
     TableRow,
 } from '../../@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../@/components/ui/card';
+import { Badge } from '../../@/components/ui/badge';
 import type { MonthlyFinancialSummary } from '@/types';
-import { Info } from 'lucide-react';
+import { Info, Battery, Sun } from 'lucide-react';
 
 interface ResultsTableProps {
     monthlyData: MonthlyFinancialSummary[];
+    scenario?: 'solarOnly' | 'withSolar';
 }
 
-export function ResultsTable({ monthlyData }: ResultsTableProps) {
+export function ResultsTable({ monthlyData, scenario = 'withSolar' }: ResultsTableProps) {
     return (
         <Card>
             <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div>
-                        <CardTitle>Monthly Bill Breakdown</CardTitle>
-                        <CardDescription>What each month's bill would have been with your solar setup</CardDescription>
+                        <div className="flex items-center gap-2 mb-1">
+                            <CardTitle>Monthly Bill Breakdown</CardTitle>
+                            <Badge variant="outline" className={scenario === 'withSolar'
+                                ? "text-emerald-700 bg-emerald-50 border-emerald-300"
+                                : "text-amber-700 bg-amber-50 border-amber-300"
+                            }>
+                                {scenario === 'withSolar' ? (
+                                    <><Battery className="h-3 w-3 mr-1" />Solar + Battery</>
+                                ) : (
+                                    <><Sun className="h-3 w-3 mr-1" />Solar Only</>
+                                )}
+                            </Badge>
+                        </div>
+                        <CardDescription>
+                            What each month's bill would have been with {scenario === 'withSolar' ? 'solar + battery' : 'solar panels only'}
+                        </CardDescription>
                     </div>
                 </div>
             </CardHeader>
@@ -33,8 +49,8 @@ export function ResultsTable({ monthlyData }: ResultsTableProps) {
                                 <TableHead>Month</TableHead>
                                 <TableHead className="text-right">Your Usage</TableHead>
                                 <TableHead className="text-right">Solar Generated</TableHead>
-                                <TableHead className="text-right">Grid Import</TableHead>
-                                <TableHead className="text-right">Grid Export</TableHead>
+                                <TableHead className="text-right">Would Import</TableHead>
+                                <TableHead className="text-right">Would Export</TableHead>
                                 <TableHead className="text-right">Import Cost</TableHead>
                                 <TableHead className="text-right">Export Earned</TableHead>
                                 <TableHead className="text-right">Net Bill</TableHead>
@@ -78,7 +94,9 @@ export function ResultsTable({ monthlyData }: ResultsTableProps) {
                 <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-900 rounded-lg text-sm">
                     <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
                     <div className="text-blue-800 dark:text-blue-200">
-                        <strong>Consumption</strong> is your actual usage from Octopus. <strong>Generation</strong> is what your solar panels would have produced based on the real weather during this period. Other columns show what your bills would have been.
+                        <strong>Your Usage</strong> is actual consumption from Octopus.{' '}
+                        <strong>Solar Generated</strong> is simulated based on real weather.{' '}
+                        <strong>Would Import/Export</strong> shows projected grid usage with your configured solar + battery system.
                     </div>
                 </div>
             </CardContent>
