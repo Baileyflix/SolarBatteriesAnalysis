@@ -132,7 +132,4 @@ src/
 
 ## Licence
 
-© 2026 Nick. All rights reserved.
-
-This code is publicly viewable for transparency but is not open source.
-You may not copy, modify, distribute, or use this code without explicit permission.
+Feel free to use this code however you like. If you find bugs or have suggestions, please [open an issue](https://github.com/Chronickle/SolarBatteriesAnalysis/issues).
