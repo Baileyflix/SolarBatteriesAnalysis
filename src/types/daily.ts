@@ -25,6 +25,52 @@ export interface DailyEnergyRecord {
 }
 
 /**
+ * Per-day cost breakdown, splitting grid import into the off-peak portion
+ * used to charge the battery vs. the regular-rate portion needed to make
+ * up the rest of that day's usage.
+ */
+export interface DailyCostBreakdown {
+    /** Date in YYYY-MM-DD format */
+    date: string;
+
+    /** Total household consumption for the day in kWh */
+    consumptionKwh: number;
+
+    /** Total solar generation for the day in kWh (0 if no solar) */
+    generationKwh: number;
+
+    /** kWh charged from the grid overnight at the off-peak rate */
+    offPeakChargeKwh: number;
+
+    /** Cost of the off-peak charging in £ */
+    offPeakChargeCostPounds: number;
+
+    /** Remaining grid import at the standard rate, needed to cover the rest of usage, in kWh */
+    regularImportKwh: number;
+
+    /** Cost of the regular-rate import in £ */
+    regularImportCostPounds: number;
+
+    /** Total grid import for the day in kWh (offPeakChargeKwh + regularImportKwh) */
+    totalImportKwh: number;
+
+    /** Total import cost for the day in £ */
+    totalImportCostPounds: number;
+
+    /** Energy exported to the grid in kWh */
+    exportKwh: number;
+
+    /** Revenue from exported energy in £ */
+    exportRevenuePounds: number;
+
+    /** Standing charge for the day in £ */
+    standingChargePounds: number;
+
+    /** Net cost for the day in £ (import cost + standing charge - export revenue) */
+    netCostPounds: number;
+}
+
+/**
  * Daily solar irradiance from NASA POWER
  */
 export interface DailyIrradiance {

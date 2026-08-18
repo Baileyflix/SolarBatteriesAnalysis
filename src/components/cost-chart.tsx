@@ -1,29 +1,51 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { getDaysInCalendarMonth } from '@/lib/utils';
 import type { MonthlyFinancialSummary } from '@/types';
 import { Info } from 'lucide-react';
 
 interface CostChartProps {
     baseline: MonthlyFinancialSummary[];
     solarOnly?: MonthlyFinancialSummary[];
+    batteryOnly?: MonthlyFinancialSummary[];
     withSolar: MonthlyFinancialSummary[];
     /** What the user actually spent on their real tariff */
     actualSpend?: MonthlyFinancialSummary[];
 }
 
-export function CostChart({ baseline, solarOnly, withSolar, actualSpend }: CostChartProps) {
+/**
+ * The first/last month of a 12-month data window is usually partial (e.g. data
+ * starting mid-month) - its raw net cost is naturally lower just because it
+ * covers fewer days, which makes the chart dip misleadingly at the edges.
+ * Scale it up to what a full calendar month would look like at the same rate.
+ */
+function extrapolateToFullMonth(month: MonthlyFinancialSummary | undefined): number | undefined {
+    if (!month || month.daysInMonth <= 0) return month?.netCostPounds;
+    const calendarDays = getDaysInCalendarMonth(month.month);
+    if (month.daysInMonth >= calendarDays) return month.netCostPounds;
+    return month.netCostPounds * (calendarDays / month.daysInMonth);
+}
+
+export function CostChart({ baseline, solarOnly, batteryOnly, withSolar, actualSpend }: CostChartProps) {
     const chartData = baseline.map((baselineMonth, index) => {
         const solarOnlyMonth = solarOnly?.[index];
+        const batteryOnlyMonth = batteryOnly?.[index];
         const solarBatteryMonth = withSolar[index];
         const actualMonth = actualSpend?.[index];
+        const calendarDays = getDaysInCalendarMonth(baselineMonth.month);
+        const isPartial = baselineMonth.daysInMonth > 0 && baselineMonth.daysInMonth < calendarDays;
         return {
             month: formatMonth(baselineMonth.month),
-            actual: actualMonth?.netCostPounds,
-            baseline: baselineMonth.netCostPounds,
-            solarOnly: solarOnlyMonth?.netCostPounds ?? 0,
-            withSolar: solarBatteryMonth?.netCostPounds ?? 0,
+            isPartial,
+            actual: extrapolateToFullMonth(actualMonth),
+            baseline: extrapolateToFullMonth(baselineMonth) ?? 0,
+            solarOnly: extrapolateToFullMonth(solarOnlyMonth) ?? 0,
+            batteryOnly: extrapolateToFullMonth(batteryOnlyMonth) ?? 0,
+            withSolar: extrapolateToFullMonth(solarBatteryMonth) ?? 0,
         };
     });
+    const hasPartialMonth = chartData.some((d) => d.isPartial);
+    const partialMonthLabels = new Set(chartData.filter((d) => d.isPartial).map((d) => d.month));
 
     return (
         <Card>
@@ -42,7 +64,12 @@ export function CostChart({ baseline, solarOnly, withSolar, actualSpend }: CostC
                     <ResponsiveContainer width="100%" height="100%" minHeight={250}>
                         <LineChart data={chartData} margin={{ top: 5, right: 10, left: -15, bottom: 5 }}>
                             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                            <XAxis dataKey="month" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                            <XAxis
+                                dataKey="month"
+                                tick={{ fontSize: 10 }}
+                                interval="preserveStartEnd"
+                                tickFormatter={(value: string) => partialMonthLabels.has(value) ? `${value}*` : value}
+                            />
                             <YAxis
                                 tick={{ fontSize: 10 }}
                                 tickFormatter={(value) => `£${value}`}
@@ -51,9 +78,13 @@ export function CostChart({ baseline, solarOnly, withSolar, actualSpend }: CostC
                             <Tooltip
                                 content={({ active, payload, label }) => {
                                     if (!active || !payload?.length) return null;
+                                    const isPartial = partialMonthLabels.has(label as string);
                                     return (
                                         <div className="bg-white dark:bg-slate-800 p-2 sm:p-3 border rounded-lg shadow-lg text-xs sm:text-sm">
                                             <p className="font-semibold mb-1 sm:mb-2">{label}</p>
+                                            {isPartial && (
+                                                <p className="text-[10px] text-amber-600 mb-1.5">Partial month - scaled up to a full month</p>
+                                            )}
                                             <div className="space-y-0.5 sm:space-y-1">
                                                 {payload.map((entry) => (
                                                     <div key={entry.dataKey} className="flex items-center justify-between gap-3 sm:gap-4">
@@ -105,6 +136,16 @@ export function CostChart({ baseline, solarOnly, withSolar, actualSpend }: CostC
                                 name="Solar Only"
                                 dot={{ r: 2 }}
                             />
+                            {batteryOnly && (
+                                <Line
+                                    type="monotone"
+                                    dataKey="batteryOnly"
+                                    stroke="#0ea5e9"
+                                    strokeWidth={2}
+                                    name="Battery Only"
+                                    dot={{ r: 2 }}
+                                />
+                            )}
                             <Line
                                 type="monotone"
                                 dataKey="withSolar"
@@ -125,10 +166,13 @@ export function CostChart({ baseline, solarOnly, withSolar, actualSpend }: CostC
                             {actualSpend && <><strong className="text-blue-600">Blue dashed</strong> = what you actually paid. </>}
                             <strong>Grey</strong> = without solar on selected tariff.{' '}
                             <strong className="text-amber-600">Amber</strong> = solar panels only.{' '}
+                            {batteryOnly && <><strong className="text-sky-600">Sky blue</strong> = battery only, no solar. </>}
                             <strong className="text-emerald-600">Green</strong> = solar + battery.
+                            {hasPartialMonth && <> <strong>*</strong> = partial month, scaled up to represent a full month.</>}
                         </span>
                         <span className="sm:hidden">
                             {actualSpend ? 'Blue = you paid. ' : ''}Green = with solar + battery
+                            {hasPartialMonth && ' (* = partial month, scaled to full)'}
                         </span>
                     </div>
                 </div>

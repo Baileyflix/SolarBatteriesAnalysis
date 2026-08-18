@@ -15,6 +15,7 @@ import { Simulator } from '@/lib/simulator';
 import {
     simulateDailyEnergyFlows,
     aggregateToMonthly,
+    aggregateToDaily,
     createAnnualSummary,
 } from '@/lib/daily-simulator';
 
@@ -24,7 +25,12 @@ interface UseSimulationParams {
     battery: BatteryConfig;
     tariff: TariffConfig;
     monthlyDirectDebitPounds?: number;
-    systemCostPounds?: number;
+    /** Cost of the solar panels alone - basis for Solar Only payback */
+    pvSystemCostPounds?: number;
+    /** Cost of the battery alone - basis for Battery Only payback (Solar + Battery payback uses both combined) */
+    batteryCostPounds?: number;
+    /** Whether Battery Only may sell stored charge back to the grid for arbitrage profit (default: pure self-consumption) */
+    allowBatteryOnlyExport?: boolean;
     /** User's actual tariff for calculating real historical spend */
     actualTariff?: TariffConfig;
     /** Half-hourly rates for accurate TOU calculations on actual tariff */
@@ -38,10 +44,22 @@ interface UseSimulationResult {
     baseline: AnnualFinancialSummary | null;
     /** Solar only (no battery) on selected tariff */
     solarOnly: AnnualFinancialSummary | null;
+    /** Battery only (no solar), charged off-peak from the grid, on selected tariff */
+    batteryOnly: AnnualFinancialSummary | null;
     /** Solar + battery on selected tariff */
     withSolar: AnnualFinancialSummary | null;
+    /** Comparison/ROI for Solar + Battery (default/headline basis) - alias for withSolarComparison/withSolarRoi */
     comparison: ScenarioComparison | null;
     roi: ROICalculation | null;
+    /** Comparison/ROI for Solar Only, using the PV-only cost */
+    solarOnlyComparison: ScenarioComparison | null;
+    solarOnlyRoi: ROICalculation | null;
+    /** Comparison/ROI for Battery Only, using the battery-only cost */
+    batteryOnlyComparison: ScenarioComparison | null;
+    batteryOnlyRoi: ROICalculation | null;
+    /** Comparison/ROI for Solar + Battery, using PV + battery cost combined */
+    withSolarComparison: ScenarioComparison | null;
+    withSolarRoi: ROICalculation | null;
     loading: boolean;
     error: string | null;
     runSimulation: (params: UseSimulationParams) => void;
@@ -170,8 +188,10 @@ export function useSimulation(): UseSimulationResult {
     const [actualSpend, setActualSpend] = useState<AnnualFinancialSummary | null>(null);
     const [baseline, setBaseline] = useState<AnnualFinancialSummary | null>(null);
     const [solarOnly, setSolarOnly] = useState<AnnualFinancialSummary | null>(null);
+    const [batteryOnly, setBatteryOnly] = useState<AnnualFinancialSummary | null>(null);
     const [withSolar, setWithSolar] = useState<AnnualFinancialSummary | null>(null);
-    const [systemCost, setSystemCost] = useState<number>(10000);
+    const [pvSystemCost, setPvSystemCost] = useState<number>(6000);
+    const [batteryCost, setBatteryCost] = useState<number>(4000);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -179,8 +199,9 @@ export function useSimulation(): UseSimulationResult {
         setLoading(true);
         setError(null);
 
-        // Store system cost for ROI calculation
-        setSystemCost(params.systemCostPounds ?? 10000);
+        // Store costs for ROI calculation
+        setPvSystemCost(params.pvSystemCostPounds ?? 6000);
+        setBatteryCost(params.batteryCostPounds ?? 4000);
 
         try {
             // Step 1 & 2: Aggregate to daily for simpler, more accurate calculations
@@ -195,7 +216,10 @@ export function useSimulation(): UseSimulationResult {
                 undefined // No arbitrage for baseline
             );
             const baselineMonthly = aggregateToMonthly(baselineFlows, params.tariff);
-            const baselineResult = createAnnualSummary(baselineMonthly);
+            const baselineResult = {
+                ...createAnnualSummary(baselineMonthly),
+                dailyBreakdown: aggregateToDaily(baselineFlows, params.tariff),
+            };
 
             // Calculate ACTUAL SPEND using user's real tariff (if provided)
             // This is a fixed reference point showing what they actually paid
@@ -224,16 +248,47 @@ export function useSimulation(): UseSimulationResult {
                 undefined // No arbitrage without battery
             );
             const solarOnlyMonthly = aggregateToMonthly(solarOnlyFlows, params.tariff);
-            const solarOnlyResult = createAnnualSummary(solarOnlyMonthly);
+            const solarOnlyResult = {
+                ...createAnnualSummary(solarOnlyMonthly),
+                dailyBreakdown: aggregateToDaily(solarOnlyFlows, params.tariff),
+            };
+
+            // Step 3c: Calculate BATTERY ONLY (no solar, battery charged off-peak from grid)
+            // By default this is pure self-consumption - it never sells stored charge back
+            // to the grid, even on tariffs with a good export rate (e.g. Flux). Without
+            // solar, "export" would only ever be grid-charged energy resold for
+            // arbitrage/trading profit, which isn't what most people mean by "battery only".
+            // Zeroing the export rate disables that path (see canExportAtPeak in
+            // simulateDailyEnergyFlows) while leaving off-peak charging - which is
+            // independent of export price - fully intact. Set allowBatteryOnlyExport to
+            // opt back into arbitrage/trading behaviour on tariffs where it's worthwhile.
+            const batteryOnlyTariff: TariffConfig = params.allowBatteryOnlyExport
+                ? params.tariff
+                : { ...params.tariff, export: { ...params.tariff.export, ratePence: 0 } };
+            const batteryOnlyFlows = simulateDailyEnergyFlows(
+                dailyConsumption,
+                dailyGeneration.map((g) => ({ ...g, generationKwh: 0 })),
+                params.battery, // Keep real battery config
+                batteryOnlyTariff
+            );
+            const batteryOnlyMonthly = aggregateToMonthly(batteryOnlyFlows, batteryOnlyTariff);
+            const batteryOnlyResult = {
+                ...createAnnualSummary(batteryOnlyMonthly),
+                dailyBreakdown: aggregateToDaily(batteryOnlyFlows, batteryOnlyTariff),
+            };
 
             // Step 3 & 4 & 5: Calculate WITH SOLAR + BATTERY + ARBITRAGE
             const solarFlows = simulateDailyEnergyFlows(dailyConsumption, dailyGeneration, params.battery, params.tariff);
             const solarMonthly = aggregateToMonthly(solarFlows, params.tariff);
-            const solarResult = createAnnualSummary(solarMonthly);
+            const solarResult = {
+                ...createAnnualSummary(solarMonthly),
+                dailyBreakdown: aggregateToDaily(solarFlows, params.tariff),
+            };
 
             setActualSpend(actualSpendResult);
             setBaseline(baselineResult);
             setSolarOnly(solarOnlyResult);
+            setBatteryOnly(batteryOnlyResult);
             setWithSolar(solarResult);
 
         } catch (err) {
@@ -242,30 +297,61 @@ export function useSimulation(): UseSimulationResult {
             setActualSpend(null);
             setBaseline(null);
             setSolarOnly(null);
+            setBatteryOnly(null);
             setWithSolar(null);
         } finally {
             setLoading(false);
         }
     }, []);
 
-    // Step 6: Compare scenarios (derived from baseline and withSolar)
-    const comparison = useMemo<ScenarioComparison | null>(() => {
-        if (!baseline || !withSolar) return null;
-        return Simulator.compareScenarios(baseline, withSolar);
-    }, [baseline, withSolar]);
+    // Step 6: "Potential savings" should always be measured against what the user
+    // actually pays today (their real tariff, real consumption, no solar/battery)
+    // whenever that's known - not against a hypothetical "no solar" cost on
+    // whatever tariff happens to be selected for the simulation.
+    const referenceResult = useMemo<AnnualFinancialSummary | null>(() => {
+        if (actualSpend && !isNaN(actualSpend.totalNetCostPounds)) return actualSpend;
+        return baseline;
+    }, [actualSpend, baseline]);
 
-    // Step 7: Calculate ROI (derived from comparison and systemCost)
-    const roi = useMemo<ROICalculation | null>(() => {
-        if (!comparison) return null;
-        return Simulator.calculateROI(comparison.annualSavingsPounds, systemCost);
-    }, [comparison, systemCost]);
+    const solarOnlyComparison = useMemo<ScenarioComparison | null>(() => {
+        if (!referenceResult || !solarOnly) return null;
+        return Simulator.compareScenarios(referenceResult, solarOnly);
+    }, [referenceResult, solarOnly]);
+
+    const batteryOnlyComparison = useMemo<ScenarioComparison | null>(() => {
+        if (!referenceResult || !batteryOnly) return null;
+        return Simulator.compareScenarios(referenceResult, batteryOnly);
+    }, [referenceResult, batteryOnly]);
+
+    const withSolarComparison = useMemo<ScenarioComparison | null>(() => {
+        if (!referenceResult || !withSolar) return null;
+        return Simulator.compareScenarios(referenceResult, withSolar);
+    }, [referenceResult, withSolar]);
+
+    // Step 7: Calculate ROI per scenario, each against its own cost basis
+    const solarOnlyRoi = useMemo<ROICalculation | null>(() => {
+        if (!solarOnlyComparison) return null;
+        return Simulator.calculateROI(solarOnlyComparison.annualSavingsPounds, pvSystemCost);
+    }, [solarOnlyComparison, pvSystemCost]);
+
+    const batteryOnlyRoi = useMemo<ROICalculation | null>(() => {
+        if (!batteryOnlyComparison) return null;
+        return Simulator.calculateROI(batteryOnlyComparison.annualSavingsPounds, batteryCost);
+    }, [batteryOnlyComparison, batteryCost]);
+
+    const withSolarRoi = useMemo<ROICalculation | null>(() => {
+        if (!withSolarComparison) return null;
+        return Simulator.calculateROI(withSolarComparison.annualSavingsPounds, pvSystemCost + batteryCost);
+    }, [withSolarComparison, pvSystemCost, batteryCost]);
 
     const reset = useCallback(() => {
         setActualSpend(null);
         setBaseline(null);
         setSolarOnly(null);
+        setBatteryOnly(null);
         setWithSolar(null);
-        setSystemCost(10000);
+        setPvSystemCost(6000);
+        setBatteryCost(4000);
         setError(null);
         setLoading(false);
     }, []);
@@ -274,9 +360,16 @@ export function useSimulation(): UseSimulationResult {
         actualSpend,
         baseline,
         solarOnly,
+        batteryOnly,
         withSolar,
-        comparison,
-        roi,
+        comparison: withSolarComparison,
+        roi: withSolarRoi,
+        solarOnlyComparison,
+        solarOnlyRoi,
+        batteryOnlyComparison,
+        batteryOnlyRoi,
+        withSolarComparison,
+        withSolarRoi,
         loading,
         error,
         runSimulation,

@@ -5,10 +5,11 @@ import { Input } from '../../@/components/ui/input';
 import { Slider } from '../../@/components/ui/slider';
 import { Button } from '../../@/components/ui/button';
 import { Badge } from '../../@/components/ui/badge';
-import { Sun, Battery, Zap, Settings2, Info, RefreshCw, PoundSterling, Car, Flame, Sparkles, CircleDot, Lock } from 'lucide-react';
+import { Sun, Battery, Zap, Settings2, Info, RefreshCw, PoundSterling, Car, Flame, Sparkles, CircleDot, Lock, Radio } from 'lucide-react';
 import { UK_BATTERY_PRESETS } from '@/lib/battery-engine';
 import { UK_PV_PRESETS } from '@/lib/solar-generator';
 import { UK_TARIFF_PRESETS } from '@/lib/cost-engine';
+import type { LivePresetRates } from '@/services/octopus-live-rates';
 import type { BatteryConfig, TariffConfig, PVSystemConfig, ActualTariffInfo } from '@/types';
 import { useState } from 'react';
 
@@ -23,8 +24,13 @@ interface ScenarioConfig {
     battery: BatteryConfig;
     tariffPreset: TariffPresetKey;
     tariff: TariffConfig;
-    systemCost: number;
+    /** Cost of the solar panels alone, used for Solar Only payback */
+    pvSystemCost: number;
+    /** Cost of the battery alone, used for Battery Only payback (Solar + Battery payback uses both combined) */
+    batteryCost: number;
     monthlyDirectDebit: number;
+    /** Whether Battery Only is allowed to sell stored charge back to the grid for arbitrage profit (default: pure self-consumption only) */
+    batteryOnlyAllowExport: boolean;
 }
 
 interface ScenarioConfigPanelProps {
@@ -35,6 +41,10 @@ interface ScenarioConfigPanelProps {
     hasChanges?: boolean;
     actualTariff?: ActualTariffInfo | null;
     onUseMyTariff?: () => void;
+    /** Live Octopus rates for presets with a resolvable product, keyed by preset */
+    liveRates?: Partial<Record<keyof typeof UK_TARIFF_PRESETS, LivePresetRates>>;
+    /** GSP region letter the live rates were resolved for, e.g. "C" */
+    liveRatesRegion?: string | null;
 }
 
 /** Get icon for tariff category */
@@ -112,6 +122,8 @@ export function ScenarioConfigPanel({
     hasChanges = false,
     actualTariff,
     onUseMyTariff,
+    liveRates,
+    liveRatesRegion,
 }: ScenarioConfigPanelProps) {
     const handlePvPresetChange = (preset: PVPresetKey): void => {
         const pvConfig = UK_PV_PRESETS[preset];
@@ -183,24 +195,41 @@ export function ScenarioConfigPanel({
             return;
         }
 
-        // Standard preset handling
+        // Standard preset handling - merge live Octopus rates over the static
+        // preset when available for this preset/region, so switching to e.g.
+        // Flux picks up today's actual off-peak/peak rates rather than the
+        // hand-maintained snapshot in cost-engine.ts.
         if (preset !== 'myTariff') {
             const tariffConfig = UK_TARIFF_PRESETS[preset];
+            const live = liveRates?.[preset];
             onChange({
                 ...config,
                 tariffPreset: preset,
                 tariff: {
-                    import: { ...tariffConfig.import },
-                    export: { ...tariffConfig.export },
+                    import: { ...tariffConfig.import, ...live?.import },
+                    export: { ...tariffConfig.export, ...live?.export },
                 },
             });
         }
     };
 
-    const handleSystemCostChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    /** Re-apply live rates onto the currently selected preset (e.g. after they first load) */
+    const handleRefreshLiveRates = (): void => {
+        if (config.tariffPreset === 'myTariff') return;
+        handleTariffPresetChange(config.tariffPreset);
+    };
+
+    const handlePvSystemCostChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
         onChange({
             ...config,
-            systemCost: parseFloat(e.target.value) || 0,
+            pvSystemCost: parseFloat(e.target.value) || 0,
+        });
+    };
+
+    const handleBatteryCostChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+        onChange({
+            ...config,
+            batteryCost: parseFloat(e.target.value) || 0,
         });
     };
 
@@ -208,6 +237,13 @@ export function ScenarioConfigPanel({
         onChange({
             ...config,
             monthlyDirectDebit: parseFloat(e.target.value) || 0,
+        });
+    };
+
+    const handleBatteryOnlyExportToggle = (): void => {
+        onChange({
+            ...config,
+            batteryOnlyAllowExport: !config.batteryOnlyAllowExport,
         });
     };
 
@@ -312,6 +348,19 @@ export function ScenarioConfigPanel({
                                 <span>30 kWh</span>
                             </div>
                         </div>
+                        <label htmlFor="batteryOnlyAllowExport" className="flex items-start gap-2 cursor-pointer">
+                            <input
+                                id="batteryOnlyAllowExport"
+                                type="checkbox"
+                                checked={config.batteryOnlyAllowExport}
+                                onChange={handleBatteryOnlyExportToggle}
+                                className="mt-0.5 h-3.5 w-3.5 accent-green-600"
+                            />
+                            <span className="text-[10px] sm:text-xs text-muted-foreground flex items-center gap-1">
+                                Allow Battery Only to export (grid arbitrage)
+                                <InfoTooltip text="When off, the 'Battery Only' scenario (no solar) never sells stored charge back to the grid - it only charges off-peak for your own use. Turn this on to also let it sell leftover charge at peak rates for arbitrage profit, on tariffs like Octopus Flux that pay well for export." />
+                            </span>
+                        </label>
                     </div>
                 </div>
 
@@ -483,7 +532,7 @@ export function ScenarioConfigPanel({
                         </div>
                         {/* Tariff Details Card */}
                         <div className="p-2 sm:p-3 bg-muted/50 rounded-lg space-y-1.5 sm:space-y-2">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                                 {config.tariffPreset === 'myTariff' ? (
                                     <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
                                         <Sparkles className="h-2.5 w-2.5" />
@@ -494,6 +543,26 @@ export function ScenarioConfigPanel({
                                         {getTariffCategoryIcon(UK_TARIFF_PRESETS[config.tariffPreset].category)}
                                         {UK_TARIFF_PRESETS[config.tariffPreset].category.toUpperCase()}
                                     </span>
+                                )}
+                                {config.tariffPreset !== 'myTariff' && liveRates?.[config.tariffPreset] && (
+                                    <span
+                                        className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300"
+                                        title="These rates were fetched live from Octopus Energy's public API for your region, not the app's static preset."
+                                    >
+                                        <Radio className="h-2.5 w-2.5" />
+                                        LIVE{liveRatesRegion ? ` · REGION ${liveRatesRegion}` : ''}
+                                    </span>
+                                )}
+                                {config.tariffPreset !== 'myTariff' && liveRates?.[config.tariffPreset] && (
+                                    <button
+                                        type="button"
+                                        onClick={handleRefreshLiveRates}
+                                        className="inline-flex items-center gap-1 text-[9px] text-muted-foreground hover:text-foreground transition-colors"
+                                        title="Re-apply the latest live rates to this tariff"
+                                    >
+                                        <RefreshCw className="h-2.5 w-2.5" />
+                                        refresh
+                                    </button>
                                 )}
                             </div>
                             <p className="text-[10px] sm:text-xs text-muted-foreground">
@@ -529,21 +598,36 @@ export function ScenarioConfigPanel({
                     </div>
                     <div className="grid grid-cols-2 gap-2 sm:gap-4 pl-4 sm:pl-6">
                         <div className="grid gap-1.5 sm:gap-2">
-                            <Label htmlFor="systemCost" className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
-                                System Cost (£)
-                                <InfoTooltip text="Total installation cost for solar panels and battery. UK average is £8,000-12,000 for panels plus £2,500-5,000 per 5kWh of battery." />
+                            <Label htmlFor="pvSystemCost" className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
+                                Solar Panel Cost (£)
+                                <InfoTooltip text="Installation cost for the solar panels alone (not the battery). UK average is £8,000-12,000. Used as the payback basis for Solar Only." />
                             </Label>
                             <Input
-                                id="systemCost"
+                                id="pvSystemCost"
                                 type="number"
                                 step="100"
-                                value={config.systemCost || ''}
-                                onChange={handleSystemCostChange}
-                                placeholder="10000"
+                                value={config.pvSystemCost || ''}
+                                onChange={handlePvSystemCostChange}
+                                placeholder="6000"
                                 className="h-8 sm:h-9 text-xs sm:text-sm"
                             />
                         </div>
                         <div className="grid gap-1.5 sm:gap-2">
+                            <Label htmlFor="batteryCost" className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
+                                Battery Cost (£)
+                                <InfoTooltip text="Installation cost for the battery alone (not the panels). UK average is £2,500-5,000 per 5kWh. Used as the payback basis for Battery Only. Solar + Battery payback uses both costs combined." />
+                            </Label>
+                            <Input
+                                id="batteryCost"
+                                type="number"
+                                step="100"
+                                value={config.batteryCost || ''}
+                                onChange={handleBatteryCostChange}
+                                placeholder="4000"
+                                className="h-8 sm:h-9 text-xs sm:text-sm"
+                            />
+                        </div>
+                        <div className="grid gap-1.5 sm:gap-2 col-span-2">
                             <Label htmlFor="monthlyDD" className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs text-muted-foreground">
                                 Monthly DD (£)
                                 <InfoTooltip text="Your current monthly Direct Debit to your energy supplier. Used to calculate potential savings." />

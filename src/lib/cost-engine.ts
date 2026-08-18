@@ -296,6 +296,25 @@ export const UK_TARIFF_PRESETS = {
         },
         description: 'Simple flat rate. 24.5p import, 15p export.',
     },
+    // No export agreement - off-peak import only, for modelling battery-only
+    // self-consumption arbitrage with no SEG/export deal in place
+    noExport: {
+        displayLabel: 'Off-Peak, No Export',
+        recommended: false,
+        category: 'standard' as const,
+        eligibility: 'all' as const,
+        import: {
+            type: 'go' as const,
+            standardRatePence: 24.50,
+            standingChargePence: 47.89,
+            offPeakRatePence: 7.50, // Cheap overnight rate for battery charging
+        },
+        export: {
+            name: 'No Export Agreement',
+            ratePence: 0,
+        },
+        description: 'Cheap off-peak import for battery charging, no export revenue (no SEG agreement).',
+    },
     // EDF GoElectric (EV tariff)
     edfGoElectric: {
         displayLabel: 'EDF GoElectric',

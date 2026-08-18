@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../@/components/ui/tabs';
 import { SummaryMetrics } from '@/components/summary-metrics';
 import { CostChart } from '@/components/cost-chart';
@@ -23,6 +23,25 @@ import { useAppState } from '@/hooks/use-app-state';
 import { useConfigChangeDetection, usePvSystemChangeDetection } from '@/hooks/use-config-change-detection';
 import { AlertCircle, Loader2, BarChart3, Activity, Table } from 'lucide-react';
 import { Badge } from '../@/components/ui/badge';
+import type { AnnualFinancialSummary, ScenarioType } from '@/types';
+
+/** Pick the right annual summary for the currently selected scenario */
+function getAnnualSummaryForScenario(
+  scenario: ScenarioType,
+  results: {
+    baseline: AnnualFinancialSummary;
+    solarOnly: AnnualFinancialSummary;
+    batteryOnly: AnnualFinancialSummary;
+    withSolar: AnnualFinancialSummary;
+  }
+): AnnualFinancialSummary {
+  switch (scenario) {
+    case 'baseline': return results.baseline;
+    case 'solarOnly': return results.solarOnly;
+    case 'batteryOnly': return results.batteryOnly;
+    case 'withSolar': return results.withSolar;
+  }
+}
 
 function App() {
   // Centralized app state management
@@ -30,6 +49,7 @@ function App() {
   const {
     connection,
     storedData,
+    liveTariffRates,
     config: scenarioConfig,
     ui,
     actions,
@@ -98,7 +118,9 @@ function App() {
         battery: scenarioConfig.battery,
         tariff: scenarioConfig.tariff,
         monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit || undefined,
-        systemCostPounds: scenarioConfig.systemCost || undefined,
+        pvSystemCostPounds: scenarioConfig.pvSystemCost || undefined,
+        batteryCostPounds: scenarioConfig.batteryCost || undefined,
+        allowBatteryOnlyExport: scenarioConfig.batteryOnlyAllowExport,
         actualTariff: storedData.actualTariffConfig ?? undefined,
         actualTariffRates: actualTariff.importTariff?.halfHourlyRates ?? undefined,
       });
@@ -107,6 +129,31 @@ function App() {
       configChangeDetection.markAsCalculated();
     }
   }, [storedData.postcode, storedData.dateRange, scenarioConfig, storedData.consumption, storedData.generation, pvChangeDetection, solarData, simulation, storedData.actualTariffConfig, actualTariff.importTariff?.halfHourlyRates, configChangeDetection, actions]);
+
+  // Restore simulation results from a persisted session on reload - the
+  // connection/consumption/generation data is rehydrated by useAppState()
+  // directly from localStorage, but the simulation itself (a separate hook)
+  // starts empty each mount and needs to be re-run once from that cached data.
+  const hasHydratedRef = useRef(false);
+  useEffect(() => {
+    if (hasHydratedRef.current) return;
+    if (!connection.isConnected || !storedData.consumption || !storedData.generation) return;
+
+    hasHydratedRef.current = true;
+    simulation.runSimulation({
+      consumption: storedData.consumption,
+      generation: storedData.generation,
+      battery: scenarioConfig.battery,
+      tariff: scenarioConfig.tariff,
+      monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit || undefined,
+      pvSystemCostPounds: scenarioConfig.pvSystemCost || undefined,
+      batteryCostPounds: scenarioConfig.batteryCost || undefined,
+      allowBatteryOnlyExport: scenarioConfig.batteryOnlyAllowExport,
+      actualTariff: storedData.actualTariffConfig ?? undefined,
+      actualTariffRates: actualTariff.importTariff?.halfHourlyRates ?? undefined,
+    });
+    configChangeDetection.markAsCalculated();
+  }, [connection.isConnected, storedData.consumption, storedData.generation, scenarioConfig, storedData.actualTariffConfig, actualTariff.importTariff?.halfHourlyRates, simulation, configChangeDetection]);
 
   // Handle connection from dialog
   const handleConnect = async (data: {
@@ -121,6 +168,8 @@ function App() {
     actions.storeConnectionData({
       apiKey: data.apiKey,
       accountNumber: data.accountNumber,
+      mpan: data.mpan,
+      serialNumber: data.serialNumber,
       postcode: data.postcode,
       dateRange: data.dateRange,
     });
@@ -171,7 +220,9 @@ function App() {
         battery: scenarioConfig.battery,
         tariff: scenarioConfig.tariff,
         monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit,
-        systemCostPounds: scenarioConfig.systemCost,
+        pvSystemCostPounds: scenarioConfig.pvSystemCost,
+        batteryCostPounds: scenarioConfig.batteryCost,
+        allowBatteryOnlyExport: scenarioConfig.batteryOnlyAllowExport,
       });
       actions.setConnected(true);
       // Mark config as calculated
@@ -233,6 +284,8 @@ function App() {
               hasChanges={configChangeDetection.hasChanged || pvChangeDetection.needsRegeneration}
               actualTariff={tariffSelection.actualTariffInfo}
               onUseMyTariff={tariffSelection.selectActualTariff}
+              liveRates={liveTariffRates.rates}
+              liveRatesRegion={liveTariffRates.region}
             />
           </div>
 
@@ -292,13 +345,19 @@ function App() {
                     </div>
                   </div>
 
-                  {hasResults && simulation.comparison ? (
+                  {hasResults && simulation.comparison && simulation.baseline && simulation.withSolar ? (
                     <>
                       <SummaryMetrics
-                        comparison={simulation.comparison}
-                        roi={simulation.roi}
+                        baseline={simulation.baseline}
+                        withSolar={simulation.withSolar}
                         solarOnly={simulation.solarOnly}
-                        usingActualTariff={scenarioConfig.tariffPreset === 'myTariff'}
+                        batteryOnly={simulation.batteryOnly}
+                        withSolarComparison={simulation.withSolarComparison}
+                        withSolarRoi={simulation.withSolarRoi}
+                        solarOnlyComparison={simulation.solarOnlyComparison}
+                        solarOnlyRoi={simulation.solarOnlyRoi}
+                        batteryOnlyComparison={simulation.batteryOnlyComparison}
+                        batteryOnlyRoi={simulation.batteryOnlyRoi}
                         actualTariff={actualTariff.importTariff}
                         actualSpend={simulation.actualSpend}
                       />
@@ -307,6 +366,7 @@ function App() {
                         <CostChart
                           baseline={simulation.baseline.monthlyBreakdown}
                           solarOnly={simulation.solarOnly?.monthlyBreakdown}
+                          batteryOnly={simulation.batteryOnly?.monthlyBreakdown}
                           withSolar={simulation.withSolar.monthlyBreakdown}
                           actualSpend={simulation.actualSpend?.monthlyBreakdown}
                         />
@@ -326,22 +386,22 @@ function App() {
                 </TabsContent>
 
                 <TabsContent value="energy" className="space-y-6">
-                  {simulation.baseline && simulation.solarOnly && simulation.withSolar && (
+                  {simulation.baseline && simulation.solarOnly && simulation.batteryOnly && simulation.withSolar && (
                     <ScenarioSelector
                       selected={ui.selectedScenario}
                       onSelect={actions.setSelectedScenario}
                       showBaseline={true}
+                      showBatteryOnly={true}
                     />
                   )}
-                  {simulation.baseline && simulation.withSolar && simulation.solarOnly ? (
+                  {simulation.baseline && simulation.solarOnly && simulation.batteryOnly && simulation.withSolar ? (
                     <EnergyFlowChart
-                      monthlyData={
-                        ui.selectedScenario === 'baseline'
-                          ? simulation.baseline.monthlyBreakdown
-                          : ui.selectedScenario === 'withSolar'
-                            ? simulation.withSolar.monthlyBreakdown
-                            : simulation.solarOnly.monthlyBreakdown
-                      }
+                      monthlyData={getAnnualSummaryForScenario(ui.selectedScenario, {
+                        baseline: simulation.baseline,
+                        solarOnly: simulation.solarOnly,
+                        batteryOnly: simulation.batteryOnly,
+                        withSolar: simulation.withSolar,
+                      }).monthlyBreakdown}
                       scenario={ui.selectedScenario}
                     />
                   ) : (
@@ -350,25 +410,30 @@ function App() {
                 </TabsContent>
 
                 <TabsContent value="breakdown" className="space-y-6">
-                  {simulation.baseline && simulation.solarOnly && simulation.withSolar && (
+                  {simulation.baseline && simulation.solarOnly && simulation.batteryOnly && simulation.withSolar && (
                     <ScenarioSelector
                       selected={ui.selectedScenario}
                       onSelect={actions.setSelectedScenario}
                       showBaseline={true}
+                      showBatteryOnly={true}
                     />
                   )}
-                  {simulation.baseline && simulation.withSolar && simulation.solarOnly ? (
-                    <ResultsTable
-                      monthlyData={
-                        ui.selectedScenario === 'baseline'
-                          ? simulation.baseline.monthlyBreakdown
-                          : ui.selectedScenario === 'withSolar'
-                            ? simulation.withSolar.monthlyBreakdown
-                            : simulation.solarOnly.monthlyBreakdown
-                      }
-                      scenario={ui.selectedScenario}
-                    />
-                  ) : (
+                  {simulation.baseline && simulation.solarOnly && simulation.batteryOnly && simulation.withSolar ? (() => {
+                    const scenarioSummary = getAnnualSummaryForScenario(ui.selectedScenario, {
+                      baseline: simulation.baseline,
+                      solarOnly: simulation.solarOnly,
+                      batteryOnly: simulation.batteryOnly,
+                      withSolar: simulation.withSolar,
+                    });
+                    return (
+                      <ResultsTable
+                        monthlyData={scenarioSummary.monthlyBreakdown}
+                        dailyBreakdown={scenarioSummary.dailyBreakdown}
+                        actualSpendMonthly={simulation.actualSpend?.monthlyBreakdown}
+                        scenario={ui.selectedScenario}
+                      />
+                    );
+                  })() : (
                     <div className="h-96 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 rounded-lg animate-pulse" />
                   )}
                 </TabsContent>

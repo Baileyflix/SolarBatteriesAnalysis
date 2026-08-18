@@ -1,3 +1,5 @@
+import type { DailyCostBreakdown } from './daily';
+
 /**
  * Monthly financial summary comparing actual vs. simulated costs
  */
@@ -83,6 +85,9 @@ export interface AnnualFinancialSummary {
 
     /** Breakdown by month */
     monthlyBreakdown: MonthlyFinancialSummary[];
+
+    /** Optional day-by-day cost breakdown, for drilling into a specific month */
+    dailyBreakdown?: DailyCostBreakdown[];
 }
 
 /**

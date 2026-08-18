@@ -5,7 +5,7 @@ import type {
     BatteryConfig,
     DailyConsumption,
 } from '@/types';
-import type { DailyEnergyRecord, DailyIrradiance, DailyGeneration } from '@/types/daily';
+import type { DailyEnergyRecord, DailyCostBreakdown, DailyIrradiance, DailyGeneration } from '@/types/daily';
 
 /**
  * PV system configuration
@@ -66,15 +66,18 @@ export interface ArbitrageResult {
  * 1. OVERNIGHT (Off-peak 02:00-05:00 or 23:30-05:30):
  *    - If tariff has cheap off-peak rate, charge battery from grid
  *    - This costs offPeakRate per kWh (e.g., 7-10p)
- * 
+ *    - Happens regardless of export price - worthwhile purely to offset
+ *      expensive daytime self-consumption, even with no export deal at all
+ *
  * 2. DAYTIME:
  *    - Self-consumed = min(generation, consumption)
  *    - Excess PV charges battery (up to capacity)
  *    - Shortfall met by battery, then grid import
- * 
+ *
  * 3. PEAK (16:00-19:00):
- *    - If tariff has high export rate, discharge battery to grid
+ *    - Only if export rate is worthwhile (>=15p): discharge battery to grid
  *    - Earns exportRate per kWh (e.g., 25p with Flux)
+ *    - If export isn't worthwhile, charge is simply carried over/self-consumed instead
  * 
  * Without battery (capacity = 0):
  * - All excess → grid export
@@ -82,6 +85,20 @@ export interface ArbitrageResult {
  * 
  * The financial benefit of arbitrage = (exportRate - offPeakRate) × exportedKwh
  * e.g., Flux: (25p - 10p) × 5kWh = 75p per day = £22.50/month potential
+ *
+ * KNOWN LIMITATION (not yet fixed): this whole model works on daily totals only -
+ * it has no visibility into *when within the day* consumption happens. That means:
+ *   1. The overnight-charge amount doesn't subtract concurrent house load during
+ *      the off-peak window (minor in practice - charger power usually dwarfs it).
+ *   2. More importantly: any house consumption that happens directly from the grid
+ *      during the off-peak window (not routed through the battery) is NOT billed
+ *      at the off-peak rate - it's lumped into the day's regular-rate import. Real
+ *      Octopus Go/Flux/etc. billing would charge that usage at the cheap rate
+ *      regardless of the battery. This means the model understates real savings
+ *      on off-peak tariffs. A proper fix needs the actual half-hourly consumption
+ *      data (already fetched from Octopus, just not used at this aggregation step)
+ *      to determine what fraction of each day's usage genuinely falls in the
+ *      off-peak window, and bill that portion cheaply independent of the battery.
  */
 export function simulateDailyEnergyFlows(
     consumption: DailyConsumption[],
@@ -100,10 +117,11 @@ export function simulateDailyEnergyFlows(
 
     const noBattery = battery.capacityKwh === 0;
 
-    // Check if tariff supports arbitrage (has cheap off-peak and good export)
-    const hasArbitrageOpportunity = tariff &&
-        tariff.import.offPeakRatePence !== undefined &&
-        tariff.export.ratePence >= 15; // Worth it if export >= 15p
+    // These are independent decisions: a tariff can be worth charging off-peak
+    // for even with no (or poor) export rate - e.g. shifting cheap overnight
+    // energy to offset expensive daytime import, with nothing ever sold back.
+    const canChargeOffPeak = tariff !== undefined && tariff.import.offPeakRatePence !== undefined;
+    const canExportAtPeak = tariff !== undefined && tariff.export.ratePence >= 15; // Only worth holding back for peak export if the rate is decent
 
     return consumption.map((day) => {
         const gen = genMap.get(day.date) ?? 0;
@@ -126,13 +144,15 @@ export function simulateDailyEnergyFlows(
         } else {
             // WITH BATTERY - Enhanced with arbitrage strategy
 
-            // STEP 1: OVERNIGHT GRID CHARGING (if tariff supports it)
-            // Charge battery from grid during off-peak hours (cheap rate)
-            if (hasArbitrageOpportunity) {
+            // STEP 1: OVERNIGHT GRID CHARGING (if tariff has a cheap off-peak rate)
+            // Charge battery from grid during off-peak hours, regardless of export price -
+            // this is worthwhile purely to offset expensive daytime self-consumption.
+            if (canChargeOffPeak) {
                 const roomInBattery = maxBatteryKwh - batteryStoredKwh;
-                // Charge overnight - typically 3-6 hours, limit to battery capacity
-                // Assume we can charge up to 80% of remaining capacity overnight
-                const overnightCharge = Math.min(roomInBattery * 0.8, battery.maxChargePowerKw * 5);
+                // Fill however much room is available, limited only by charge power over
+                // a representative off-peak window (~5 hours - most UK off-peak windows
+                // are 3-6 hours). A well-sized battery should reach full capacity most nights.
+                const overnightCharge = Math.min(roomInBattery, battery.maxChargePowerKw * 5);
                 const actualCharge = overnightCharge * efficiency;
                 batteryStoredKwh += actualCharge;
                 overnightChargeKwh = overnightCharge;
@@ -147,9 +167,10 @@ export function simulateDailyEnergyFlows(
                 batteryStoredKwh += canCharge;
                 const excessUsedForCharging = canCharge / efficiency;
                 excess -= excessUsedForCharging;
-                // Don't export during day - save for peak (if arbitrage)
-                if (!hasArbitrageOpportunity) {
+                // Don't export during day - save for peak (only worth holding back if peak export pays)
+                if (!canExportAtPeak) {
                     gridExport = excess;
+                    excess = 0; // already accounted for above - avoid double-counting below
                 }
             }
 
@@ -162,7 +183,7 @@ export function simulateDailyEnergyFlows(
             }
 
             // STEP 3: PEAK EXPORT (16:00-19:00) - Discharge battery for revenue
-            if (hasArbitrageOpportunity) {
+            if (canExportAtPeak) {
                 // Export battery contents during peak hours (3 hours)
                 const availableForExport = (batteryStoredKwh - minBatteryKwh) * efficiency;
                 // Limit by max discharge power × peak hours (3hrs)
@@ -270,6 +291,49 @@ export function aggregateToMonthly(
     summaries.sort((a, b) => a.month.localeCompare(b.month));
 
     return summaries;
+}
+
+/**
+ * Break each day down into off-peak battery-charging cost vs. regular-rate
+ * import cost, so a UI can drill into a single day's bill rather than only
+ * seeing the monthly total. Uses the exact same rate logic as aggregateToMonthly.
+ */
+export function aggregateToDaily(
+    dailyRecords: DailyEnergyRecord[],
+    tariff: TariffConfig
+): DailyCostBreakdown[] {
+    const offPeakRate = tariff.import.offPeakRatePence ?? tariff.import.standardRatePence;
+    const standardRate = tariff.import.standardRatePence;
+    const exportRate = tariff.export.ratePence;
+    const standingChargePounds = tariff.import.standingChargePence / 100;
+
+    return dailyRecords.map((day) => {
+        const offPeakChargeKwh = day.overnightChargeKwh ?? 0;
+        const regularImportKwh = day.gridImportKwh - offPeakChargeKwh;
+
+        const offPeakChargeCostPounds = (offPeakChargeKwh * offPeakRate) / 100;
+        const regularImportCostPounds = (regularImportKwh * standardRate) / 100;
+        const totalImportCostPounds = offPeakChargeCostPounds + regularImportCostPounds;
+
+        const exportRevenuePounds = (day.gridExportKwh * exportRate) / 100;
+        const netCostPounds = totalImportCostPounds + standingChargePounds - exportRevenuePounds;
+
+        return {
+            date: day.date,
+            consumptionKwh: Math.round(day.consumptionKwh * 100) / 100,
+            generationKwh: Math.round(day.generationKwh * 100) / 100,
+            offPeakChargeKwh: Math.round(offPeakChargeKwh * 100) / 100,
+            offPeakChargeCostPounds: Math.round(offPeakChargeCostPounds * 100) / 100,
+            regularImportKwh: Math.round(regularImportKwh * 100) / 100,
+            regularImportCostPounds: Math.round(regularImportCostPounds * 100) / 100,
+            totalImportKwh: Math.round(day.gridImportKwh * 100) / 100,
+            totalImportCostPounds: Math.round(totalImportCostPounds * 100) / 100,
+            exportKwh: Math.round(day.gridExportKwh * 100) / 100,
+            exportRevenuePounds: Math.round(exportRevenuePounds * 100) / 100,
+            standingChargePounds: Math.round(standingChargePounds * 100) / 100,
+            netCostPounds: Math.round(netCostPounds * 100) / 100,
+        };
+    });
 }
 
 /**

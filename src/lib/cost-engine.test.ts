@@ -180,7 +180,8 @@ describe('CostEngine', () => {
                 expect(preset.displayLabel).toBeDefined();
                 expect(preset.import.standardRatePence).toBeGreaterThan(0);
                 expect(preset.import.standingChargePence).toBeGreaterThan(0);
-                expect(preset.export.ratePence).toBeGreaterThan(0);
+                // 0 is valid - represents no export agreement in place (e.g. noExport preset)
+                expect(preset.export.ratePence).toBeGreaterThanOrEqual(0);
                 expect(preset.category).toBeDefined();
                 expect(preset.eligibility).toBeDefined();
             }

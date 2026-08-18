@@ -18,6 +18,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { UK_BATTERY_PRESETS } from '@/lib/battery-engine';
 import { UK_PV_PRESETS } from '@/lib/solar-generator';
 import { UK_TARIFF_PRESETS } from '@/lib/cost-engine';
+import { loadSession, saveSession, clearSession } from '@/lib/session-persistence';
+import { useLiveTariffRates } from '@/hooks/use-live-tariff-rates';
+import type { LiveTariffRatesState } from '@/hooks/use-live-tariff-rates';
 import type { ConsumptionTimeSeries, GenerationTimeSeries, TariffConfig, ScenarioType } from '@/types';
 import type { ScenarioConfig } from '@/components/scenario-config-panel';
 
@@ -42,8 +45,10 @@ export function createDefaultConfig(): ScenarioConfig {
             import: { ...UK_TARIFF_PRESETS.octopusFlux.import },
             export: { ...UK_TARIFF_PRESETS.octopusFlux.export },
         },
-        systemCost: 10000,
+        pvSystemCost: 6000,
+        batteryCost: 4000,
         monthlyDirectDebit: 150,
+        batteryOnlyAllowExport: false,
     };
 }
 
@@ -53,6 +58,8 @@ export function createDefaultConfig(): ScenarioConfig {
 export interface ConnectionData {
     apiKey: string;
     accountNumber: string;
+    mpan: string;
+    serialNumber: string;
     postcode: string;
     dateRange: { from: string; to: string };
 }
@@ -67,6 +74,8 @@ export interface AppState {
         dialogOpen: boolean;
         apiKey: string;
         accountNumber: string;
+        mpan: string;
+        serialNumber: string;
     };
 
     /** Data stored from API calls */
@@ -81,6 +90,9 @@ export interface AppState {
         /** Derived: true when consumption data exists */
         hasStoredConsumption: boolean;
     };
+
+    /** Live Octopus tariff rates for the connected postcode's GSP region */
+    liveTariffRates: LiveTariffRatesState;
 
     /** Current scenario configuration */
     config: ScenarioConfig;
@@ -124,21 +136,61 @@ export interface AppState {
  * Central app state management hook
  */
 export function useAppState(): AppState {
+    // Read any previously persisted session once, at mount - reused below to
+    // hydrate state so a reload doesn't require re-entering the API key.
+    const [persisted] = useState(loadSession);
+
     // Connection state
-    const [isConnected, setIsConnected] = useState(false);
+    const [isConnected, setIsConnected] = useState(() => persisted !== null);
     const [connectDialogOpen, setConnectDialogOpen] = useState(false);
-    const [storedApiKey, setStoredApiKey] = useState('');
-    const [storedAccountNumber, setStoredAccountNumber] = useState('');
+    const [storedApiKey, setStoredApiKey] = useState(() => persisted?.apiKey ?? '');
+    const [storedAccountNumber, setStoredAccountNumber] = useState(() => persisted?.accountNumber ?? '');
+    const [storedMpan, setStoredMpan] = useState(() => persisted?.mpan ?? '');
+    const [storedSerialNumber, setStoredSerialNumber] = useState(() => persisted?.serialNumber ?? '');
 
     // Stored data from API calls
-    const [storedConsumption, setStoredConsumption] = useState<ConsumptionTimeSeries | null>(null);
-    const [storedGeneration, setStoredGeneration] = useState<GenerationTimeSeries | null>(null);
-    const [storedPostcode, setStoredPostcode] = useState('');
-    const [storedDateRange, setStoredDateRange] = useState<{ from: string; to: string } | null>(null);
-    const [storedActualTariffConfig, setStoredActualTariffConfig] = useState<TariffConfig | null>(null);
+    const [storedConsumption, setStoredConsumption] = useState<ConsumptionTimeSeries | null>(() => persisted?.consumption ?? null);
+    const [storedGeneration, setStoredGeneration] = useState<GenerationTimeSeries | null>(() => persisted?.generation ?? null);
+    const [storedPostcode, setStoredPostcode] = useState(() => persisted?.postcode ?? '');
+    const [storedDateRange, setStoredDateRange] = useState<{ from: string; to: string } | null>(() => persisted?.dateRange ?? null);
+    const [storedActualTariffConfig, setStoredActualTariffConfig] = useState<TariffConfig | null>(() => persisted?.actualTariffConfig ?? null);
+
+    // Live Octopus tariff rates for the connected postcode's GSP region
+    const liveTariffRates = useLiveTariffRates(storedPostcode);
 
     // Scenario configuration
-    const [scenarioConfig, setScenarioConfig] = useState<ScenarioConfig>(createDefaultConfig);
+    const [scenarioConfig, setScenarioConfig] = useState<ScenarioConfig>(() => persisted?.scenarioConfig ?? createDefaultConfig());
+
+    // Persist the session whenever connected data changes, so a reload can
+    // skip straight back to the dashboard instead of the connect dialog.
+    useEffect(() => {
+        if (!isConnected || !storedDateRange) return;
+        saveSession({
+            version: 1,
+            apiKey: storedApiKey,
+            accountNumber: storedAccountNumber,
+            mpan: storedMpan,
+            serialNumber: storedSerialNumber,
+            postcode: storedPostcode,
+            dateRange: storedDateRange,
+            consumption: storedConsumption,
+            generation: storedGeneration,
+            actualTariffConfig: storedActualTariffConfig,
+            scenarioConfig,
+        });
+    }, [
+        isConnected,
+        storedApiKey,
+        storedAccountNumber,
+        storedMpan,
+        storedSerialNumber,
+        storedPostcode,
+        storedDateRange,
+        storedConsumption,
+        storedGeneration,
+        storedActualTariffConfig,
+        scenarioConfig,
+    ]);
 
     // UI state
     const [activeTab, setActiveTab] = useState('results');
@@ -167,6 +219,8 @@ export function useAppState(): AppState {
         setStoredDateRange(data.dateRange);
         setStoredApiKey(data.apiKey);
         setStoredAccountNumber(data.accountNumber);
+        setStoredMpan(data.mpan);
+        setStoredSerialNumber(data.serialNumber);
     }, []);
 
     const storeConsumption = useCallback((data: ConsumptionTimeSeries) => {
@@ -190,6 +244,8 @@ export function useAppState(): AppState {
         setIsConnected(false);
         setStoredApiKey('');
         setStoredAccountNumber('');
+        setStoredMpan('');
+        setStoredSerialNumber('');
 
         // Clear stored data
         setStoredConsumption(null);
@@ -201,8 +257,8 @@ export function useAppState(): AppState {
         // Reset config to defaults
         setScenarioConfig(createDefaultConfig());
 
-        // Clear localStorage
-        localStorage.removeItem('solar-calculator-preferences');
+        // Clear persisted session
+        clearSession();
     }, []);
 
     const setConfig = useCallback((config: ScenarioConfig) => {
@@ -223,6 +279,8 @@ export function useAppState(): AppState {
             dialogOpen: connectDialogOpen,
             apiKey: storedApiKey,
             accountNumber: storedAccountNumber,
+            mpan: storedMpan,
+            serialNumber: storedSerialNumber,
         },
         storedData: {
             consumption: storedConsumption,
@@ -233,6 +291,7 @@ export function useAppState(): AppState {
             hasStoredGeneration: storedGeneration !== null,
             hasStoredConsumption: storedConsumption !== null,
         },
+        liveTariffRates,
         config: scenarioConfig,
         ui: {
             isDark,

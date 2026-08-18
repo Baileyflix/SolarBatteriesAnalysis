@@ -33,6 +33,12 @@ function getScenarioBadge(scenario: ScenarioType) {
                 icon: <Sun className="h-3 w-3 mr-1" />,
                 label: "Solar Only"
             };
+        case 'batteryOnly':
+            return {
+                className: "text-sky-700 bg-sky-50 border-sky-300",
+                icon: <Battery className="h-3 w-3 mr-1" />,
+                label: "Battery Only"
+            };
         case 'withSolar':
             return {
                 className: "text-emerald-700 bg-emerald-50 border-emerald-300",
@@ -46,26 +52,29 @@ function getScenarioSubtext(scenario: ScenarioType): string {
     switch (scenario) {
         case 'baseline': return 'without solar';
         case 'solarOnly': return 'with solar only';
+        case 'batteryOnly': return 'with battery only (off-peak grid charging)';
         case 'withSolar': return 'with solar + battery';
     }
 }
 
 export function EnergyFlowChart({ monthlyData, scenario = 'withSolar' }: EnergyFlowChartProps) {
     const isBaseline = scenario === 'baseline';
+    const isBatteryOnly = scenario === 'batteryOnly';
+    const hideGeneration = isBaseline || isBatteryOnly;
 
     const chartData = monthlyData.map((month) => ({
         month: formatMonth(month.month),
         fullMonth: month.month,
         consumption: Math.round(month.totalConsumptionKwh),
-        generation: isBaseline ? 0 : Math.round(month.totalGenerationKwh),
-        selfConsumed: isBaseline ? 0 : Math.round(Math.min(month.totalGenerationKwh, month.totalConsumptionKwh) - month.gridExportKwh),
+        generation: hideGeneration ? 0 : Math.round(month.totalGenerationKwh),
+        selfConsumed: hideGeneration ? 0 : Math.round(Math.min(month.totalGenerationKwh, month.totalConsumptionKwh) - month.gridExportKwh),
         gridImport: Math.round(month.gridImportKwh),
         gridExport: isBaseline ? 0 : Math.round(month.gridExportKwh),
     }));
 
     // Calculate totals for summary
     const totalConsumption = monthlyData.reduce((sum, m) => sum + m.totalConsumptionKwh, 0);
-    const totalGeneration = isBaseline ? 0 : monthlyData.reduce((sum, m) => sum + m.totalGenerationKwh, 0);
+    const totalGeneration = hideGeneration ? 0 : monthlyData.reduce((sum, m) => sum + m.totalGenerationKwh, 0);
     const totalGridImport = monthlyData.reduce((sum, m) => sum + m.gridImportKwh, 0);
     const totalGridExport = isBaseline ? 0 : monthlyData.reduce((sum, m) => sum + m.gridExportKwh, 0);
 
@@ -85,7 +94,9 @@ export function EnergyFlowChart({ monthlyData, scenario = 'withSolar' }: EnergyF
                         <CardDescription>
                             {isBaseline
                                 ? "Your actual usage with all energy from the grid"
-                                : "Your actual usage vs simulated solar generation (based on real weather)"
+                                : isBatteryOnly
+                                    ? "Your actual usage vs simulated battery charge/discharge (no solar)"
+                                    : "Your actual usage vs simulated solar generation (based on real weather)"
                             }
                         </CardDescription>
                     </div>
@@ -94,7 +105,7 @@ export function EnergyFlowChart({ monthlyData, scenario = 'withSolar' }: EnergyF
                             <span className="w-2 h-2 rounded-full bg-slate-500 mr-1.5" />
                             Your Usage
                         </Badge>
-                        {!isBaseline && (
+                        {!hideGeneration && (
                             <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-300">
                                 <span className="w-2 h-2 rounded-full bg-amber-500 mr-1.5" />
                                 Solar Generation
@@ -111,7 +122,7 @@ export function EnergyFlowChart({ monthlyData, scenario = 'withSolar' }: EnergyF
                         <div className="text-lg font-bold text-slate-700 dark:text-slate-300">{Math.round(totalConsumption).toLocaleString()} kWh</div>
                         <div className="text-[10px] text-muted-foreground">actual from Octopus</div>
                     </div>
-                    {!isBaseline && (
+                    {!hideGeneration && (
                         <div className="text-center">
                             <div className="text-xs text-muted-foreground mb-1">Solar Generated</div>
                             <div className="text-lg font-bold text-amber-600">{Math.round(totalGeneration).toLocaleString()} kWh</div>
@@ -214,7 +225,11 @@ export function EnergyFlowChart({ monthlyData, scenario = 'withSolar' }: EnergyF
                     <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
                     <div className="text-blue-800 dark:text-blue-200">
                         <strong>Consumption</strong> is your actual usage from Octopus Energy for this period.{' '}
-                        <strong>Generation</strong> shows what your solar panels would have produced based on the <em>actual weather</em> during this same period.
+                        {isBatteryOnly ? (
+                            <>There's no solar here - the battery charges from the grid off-peak and discharges to cover your usage, so <strong>Generation</strong> is 0.</>
+                        ) : (
+                            <><strong>Generation</strong> shows what your solar panels would have produced based on the <em>actual weather</em> during this same period.</>
+                        )}
                     </div>
                 </div>
             </CardContent>

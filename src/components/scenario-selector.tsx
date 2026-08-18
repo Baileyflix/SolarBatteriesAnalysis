@@ -11,9 +11,11 @@ interface ScenarioSelectorProps {
     onSelect: (scenario: ScenarioType) => void;
     /** Whether to show the baseline option (requires baseline data) */
     showBaseline?: boolean;
+    /** Whether to show the battery-only option (requires batteryOnly data) */
+    showBatteryOnly?: boolean;
 }
 
-export function ScenarioSelector({ selected, onSelect, showBaseline = false }: ScenarioSelectorProps) {
+export function ScenarioSelector({ selected, onSelect, showBaseline = false, showBatteryOnly = false }: ScenarioSelectorProps) {
     return (
         <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Showing:</span>
@@ -38,6 +40,17 @@ export function ScenarioSelector({ selected, onSelect, showBaseline = false }: S
                 >
                     Solar Only
                 </button>
+                {showBatteryOnly && (
+                    <button
+                        onClick={() => onSelect('batteryOnly')}
+                        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${selected === 'batteryOnly'
+                                ? 'bg-background shadow-sm font-medium'
+                                : 'hover:bg-background/50'
+                            }`}
+                    >
+                        Battery Only
+                    </button>
+                )}
                 <button
                     onClick={() => onSelect('withSolar')}
                     className={`px-3 py-1.5 text-sm rounded-md transition-colors ${selected === 'withSolar'

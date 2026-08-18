@@ -25,8 +25,10 @@ describe('createDefaultConfig', () => {
         expect(config.tariffPreset).toBe('octopusFlux');
         expect(config.tariff.import).toBeDefined();
         expect(config.tariff.export).toBeDefined();
-        expect(config.systemCost).toBeGreaterThan(0);
+        expect(config.pvSystemCost).toBeGreaterThan(0);
+        expect(config.batteryCost).toBeGreaterThan(0);
         expect(config.monthlyDirectDebit).toBeGreaterThan(0);
+        expect(config.batteryOnlyAllowExport).toBe(false);
     });
 
     it('returns a new object each time', () => {
@@ -242,7 +244,7 @@ describe('useAppState', () => {
                 result.current.actions.setConfig({
                     ...createDefaultConfig(),
                     pvPreset: 'large',
-                    systemCost: 20000,
+                    pvSystemCost: 20000,
                 });
                 result.current.actions.setConnected(true);
             });
@@ -256,7 +258,7 @@ describe('useAppState', () => {
 
             const defaultConfig = createDefaultConfig();
             expect(result.current.config.pvPreset).toBe(defaultConfig.pvPreset);
-            expect(result.current.config.systemCost).toBe(defaultConfig.systemCost);
+            expect(result.current.config.pvSystemCost).toBe(defaultConfig.pvSystemCost);
         });
 
         it('clears localStorage on disconnect', () => {
@@ -279,7 +281,7 @@ describe('useAppState', () => {
             const newConfig = {
                 ...createDefaultConfig(),
                 pvPreset: 'large' as const,
-                systemCost: 15000,
+                pvSystemCost: 15000,
             };
 
             act(() => {
@@ -287,7 +289,7 @@ describe('useAppState', () => {
             });
 
             expect(result.current.config.pvPreset).toBe('large');
-            expect(result.current.config.systemCost).toBe(15000);
+            expect(result.current.config.pvSystemCost).toBe(15000);
         });
     });
 

@@ -20,6 +20,7 @@ export type {
 // Daily data types (simplified)
 export type {
     DailyEnergyRecord,
+    DailyCostBreakdown,
     DailyIrradiance,
     DailyGeneration,
     DailyConsumption,
@@ -56,4 +57,4 @@ export type {
 } from './financial';
 
 // UI types
-export type ScenarioType = 'baseline' | 'solarOnly' | 'withSolar';
+export type ScenarioType = 'baseline' | 'solarOnly' | 'batteryOnly' | 'withSolar';

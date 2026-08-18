@@ -36,7 +36,9 @@ interface UseActualTariffEffectParams {
         battery: ScenarioConfig['battery'];
         tariff: ScenarioConfig['tariff'];
         monthlyDirectDebitPounds?: number;
-        systemCostPounds?: number;
+        pvSystemCostPounds?: number;
+        batteryCostPounds?: number;
+        allowBatteryOnlyExport?: boolean;
         actualTariff?: TariffConfig;
         actualTariffRates?: TariffRatePeriod[];
     }) => void;
@@ -95,7 +97,9 @@ export function useActualTariffEffect({
                 battery: scenarioConfig.battery,
                 tariff: scenarioConfig.tariff,
                 monthlyDirectDebitPounds: scenarioConfig.monthlyDirectDebit || undefined,
-                systemCostPounds: scenarioConfig.systemCost || undefined,
+                pvSystemCostPounds: scenarioConfig.pvSystemCost || undefined,
+                batteryCostPounds: scenarioConfig.batteryCost || undefined,
+                allowBatteryOnlyExport: scenarioConfig.batteryOnlyAllowExport,
                 actualTariff: tariffConfig,
                 actualTariffRates: importTariff.halfHourlyRates,
             });
